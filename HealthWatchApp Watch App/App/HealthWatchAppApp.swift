@@ -16,7 +16,7 @@ struct HealthWatchApp_Watch_AppApp: App {
                     WatchCodeEntryView(individualName: message.individualName)
 
                 case .provisioned:
-                    WatchStatusView()
+                    WatchProvisionedTabView()
 
                 case .error(let error):
                     WatchErrorView(error: error)
