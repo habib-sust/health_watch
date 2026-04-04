@@ -11,6 +11,7 @@
 		175792002F7EC6CB007E0116 /* HealthWatch_Implementation_Guide_Demo.md in Resources */ = {isa = PBXBuildFile; fileRef = 175791FF2F7EC6CB007E0116 /* HealthWatch_Implementation_Guide_Demo.md */; };
 		1757920F2F7EC7B8007E0116 /* HealthWatchApp Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 175792052F7EC7B7007E0116 /* HealthWatchApp Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		17F8250B2F7F8B600080E4EE /* HealthWatch_Implementation_Steps.md in Resources */ = {isa = PBXBuildFile; fileRef = 17F8250A2F7F8B600080E4EE /* HealthWatch_Implementation_Steps.md */; };
+		17F825DB2F8170BD0080E4EE /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = 17F825DA2F8170BD0080E4EE /* README.md */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -50,6 +51,7 @@
 		17F825CE2F8041650080E4EE /* ErrorHandlerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorHandlerTests.swift; sourceTree = "<group>"; };
 		17F825CF2F8041700080E4EE /* IndividualModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IndividualModelTests.swift; sourceTree = "<group>"; };
 		17F825D02F8041790080E4EE /* DashboardViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardViewModelTests.swift; sourceTree = "<group>"; };
+		17F825DA2F8170BD0080E4EE /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -99,6 +101,7 @@
 		175791E62F7EC672007E0116 = {
 			isa = PBXGroup;
 			children = (
+				17F825DA2F8170BD0080E4EE /* README.md */,
 				175791FF2F7EC6CB007E0116 /* HealthWatch_Implementation_Guide_Demo.md */,
 				175791FD2F7EC6C2007E0116 /* HealthWatch_Project_Specification_1.md */,
 				175791F12F7EC672007E0116 /* HealthWatch */,
@@ -225,6 +228,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				175792002F7EC6CB007E0116 /* HealthWatch_Implementation_Guide_Demo.md in Resources */,
+				17F825DB2F8170BD0080E4EE /* README.md in Resources */,
 				17F8250B2F7F8B600080E4EE /* HealthWatch_Implementation_Steps.md in Resources */,
 				175791FE2F7EC6C2007E0116 /* HealthWatch_Project_Specification_1.md in Resources */,
 			);
