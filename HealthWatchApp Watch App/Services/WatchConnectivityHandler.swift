@@ -72,6 +72,12 @@ extension WatchConnectivityHandler: WCSessionDelegate {
         case .codeFailed:
             DispatchQueue.main.async { self.onCodeFailed?() }
 
+        case .deprovision:
+            DispatchQueue.main.async {
+                WatchAppState.shared.resetToUnprovisioned()
+            }
+            sendAck()
+
         default:
             break
         }

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct DashboardView: View {
     @StateObject private var viewModel = DashboardViewModel()
+    @AppStorage("provisionedIndividualId") private var provisionedIndividualId: String?
 
     private let columns = [
         GridItem(.flexible()),
@@ -18,7 +19,10 @@ struct DashboardView: View {
                     LazyVGrid(columns: columns, spacing: 12) {
                         ForEach(viewModel.individuals) { individual in
                             NavigationLink(value: individual) {
-                                IndividualCardView(individual: individual)
+                                IndividualCardView(
+                                    individual: individual,
+                                    isProvisioned: individual.id == provisionedIndividualId
+                                )
                             }
                             .buttonStyle(.plain)
                         }

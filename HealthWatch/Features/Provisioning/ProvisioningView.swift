@@ -120,6 +120,42 @@ struct ProvisioningView: View {
 
     private var individualSelectionView: some View {
         List {
+            // Show current provisioning status
+            if let provisionedId = viewModel.provisionedIndividualId,
+               let provisionedName = viewModel.availableIndividuals.first(where: { $0.id == provisionedId })?.name {
+                Section {
+                    HStack {
+                        Image(systemName: "applewatch")
+                            .foregroundStyle(.blue)
+                            .font(.title2)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Watch Provisioned")
+                                .font(.headline)
+                            Text(provisionedName)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                    }
+                    .padding(.vertical, 4)
+
+                    Button(role: .destructive) {
+                        viewModel.showRemoveConfirmation = true
+                    } label: {
+                        HStack {
+                            Spacer()
+                            Label("Remove Provisioning", systemImage: "xmark.circle")
+                                .font(.subheadline.weight(.medium))
+                            Spacer()
+                        }
+                    }
+                } header: {
+                    Text("Current Status")
+                }
+            }
+
             Section {
                 ForEach(viewModel.availableIndividuals) { individual in
                     Button {
@@ -134,6 +170,11 @@ struct ProvisioningView: View {
                                     .foregroundStyle(.secondary)
                             }
                             Spacer()
+                            if individual.id == viewModel.provisionedIndividualId {
+                                Label("Provisioned", systemImage: "applewatch")
+                                    .font(.caption)
+                                    .foregroundStyle(.blue)
+                            }
                             if viewModel.selectedIndividual?.id == individual.id {
                                 Image(systemName: "checkmark.circle.fill")
                                     .foregroundStyle(.blue)
@@ -161,6 +202,14 @@ struct ProvisioningView: View {
                 }
                 .disabled(viewModel.selectedIndividual == nil)
             }
+        }
+        .alert("Remove Provisioning?", isPresented: $viewModel.showRemoveConfirmation) {
+            Button("Cancel", role: .cancel) {}
+            Button("Remove", role: .destructive) {
+                viewModel.removeProvisioning()
+            }
+        } message: {
+            Text("This will unpair the Apple Watch and stop health data collection. The watch will need to be provisioned again.")
         }
     }
 }

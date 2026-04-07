@@ -45,9 +45,14 @@ enum ProvisioningState: Equatable {
 final class ProvisioningViewModel: ObservableObject {
     @Published var state: ProvisioningState = .selectIndividual
     @Published var selectedIndividual: Individual?
+    @Published var provisionedIndividualId: String?
+    @Published var showRemoveConfirmation = false
 
     /// Demo: individuals loaded from mock data
     let availableIndividuals = MockIndividuals.all
+
+    private static let provisionedIdKey = "provisionedIndividualId"
+    private static let provisionedNameKey = "provisionedIndividualName"
 
     private let watchManager: WatchConnectivityManager
     private var generatedCode: String?
@@ -58,6 +63,7 @@ final class ProvisioningViewModel: ObservableObject {
 
     init(watchManager: WatchConnectivityManager) {
         self.watchManager = watchManager
+        self.provisionedIndividualId = UserDefaults.standard.string(forKey: Self.provisionedIdKey)
         setupCallbacks()
     }
 
@@ -70,7 +76,7 @@ final class ProvisioningViewModel: ObservableObject {
 
         watchManager.onAckReceived = { [weak self] in
             Task { @MainActor in
-                self?.state = .success
+                self?.handleAckFromWatch()
             }
         }
     }
@@ -144,6 +150,30 @@ final class ProvisioningViewModel: ObservableObject {
                 state = .codeFailed(attemptsRemaining: maxAttempts - failedAttempts)
             }
         }
+    }
+
+    private func handleAckFromWatch() {
+        if state == .sendingConfig || state == .codeAccepted {
+            // Provisioning ACK — save provisioned individual
+            if let id = selectedIndividual?.id {
+                UserDefaults.standard.set(id, forKey: Self.provisionedIdKey)
+                UserDefaults.standard.set(selectedIndividual?.name, forKey: Self.provisionedNameKey)
+                provisionedIndividualId = id
+            }
+            state = .success
+        } else {
+            // Deprovision ACK — already cleared in removeProvisioning()
+        }
+    }
+
+    func removeProvisioning() {
+        let message = ProvisioningMessage(type: .deprovision)
+        watchManager.send(message)
+
+        UserDefaults.standard.removeObject(forKey: Self.provisionedIdKey)
+        UserDefaults.standard.removeObject(forKey: Self.provisionedNameKey)
+        provisionedIndividualId = nil
+        state = .selectIndividual
     }
 
     func retryProvisioning() async {

@@ -6,6 +6,7 @@ enum ProvisioningMessageType: String, Codable {
     case codeVerified    // iOS -> Watch: code accepted, here's config
     case codeFailed      // iOS -> Watch: code rejected
     case ack             // Watch -> iOS: config stored successfully
+    case deprovision     // iOS -> Watch: remove provisioning
 }
 
 struct ProvisioningMessage: Codable {
