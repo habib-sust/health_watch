@@ -12,6 +12,7 @@
 		1757920F2F7EC7B8007E0116 /* HealthWatchApp Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 175792052F7EC7B7007E0116 /* HealthWatchApp Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		17F8250B2F7F8B600080E4EE /* HealthWatch_Implementation_Steps.md in Resources */ = {isa = PBXBuildFile; fileRef = 17F8250A2F7F8B600080E4EE /* HealthWatch_Implementation_Steps.md */; };
 		17F825DB2F8170BD0080E4EE /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = 17F825DA2F8170BD0080E4EE /* README.md */; };
+		17F826822F81781C0080E4EE /* HealthWatch_Provisioning_Flow.md in Resources */ = {isa = PBXBuildFile; fileRef = 17F826812F81781C0080E4EE /* HealthWatch_Provisioning_Flow.md */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -52,6 +53,7 @@
 		17F825CF2F8041700080E4EE /* IndividualModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IndividualModelTests.swift; sourceTree = "<group>"; };
 		17F825D02F8041790080E4EE /* DashboardViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardViewModelTests.swift; sourceTree = "<group>"; };
 		17F825DA2F8170BD0080E4EE /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
+		17F826812F81781C0080E4EE /* HealthWatch_Provisioning_Flow.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = HealthWatch_Provisioning_Flow.md; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -109,6 +111,7 @@
 				175791F02F7EC672007E0116 /* Products */,
 				17F8250A2F7F8B600080E4EE /* HealthWatch_Implementation_Steps.md */,
 				17F825C92F8041150080E4EE /* HealthWatchTests */,
+				17F826812F81781C0080E4EE /* HealthWatch_Provisioning_Flow.md */,
 			);
 			sourceTree = "<group>";
 		};
@@ -230,6 +233,7 @@
 				175792002F7EC6CB007E0116 /* HealthWatch_Implementation_Guide_Demo.md in Resources */,
 				17F825DB2F8170BD0080E4EE /* README.md in Resources */,
 				17F8250B2F7F8B600080E4EE /* HealthWatch_Implementation_Steps.md in Resources */,
+				17F826822F81781C0080E4EE /* HealthWatch_Provisioning_Flow.md in Resources */,
 				175791FE2F7EC6C2007E0116 /* HealthWatch_Project_Specification_1.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -397,7 +401,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = ZCH2J3JR2Z;
+				DEVELOPMENT_TEAM = YJ4N7HRX5C;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = HealthWatch/Info.plist;
@@ -412,7 +416,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.habib..HealthWatch;
+				PRODUCT_BUNDLE_IDENTIFIER = com.habib.HealthWatch;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -431,7 +435,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = ZCH2J3JR2Z;
+				DEVELOPMENT_TEAM = YJ4N7HRX5C;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = HealthWatch/Info.plist;
@@ -446,7 +450,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.habib..HealthWatch;
+				PRODUCT_BUNDLE_IDENTIFIER = com.habib.HealthWatch;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -466,7 +470,7 @@
 				CODE_SIGN_ENTITLEMENTS = "HealthWatchApp Watch App/HealthWatchApp Watch App.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = ZCH2J3JR2Z;
+				DEVELOPMENT_TEAM = YJ4N7HRX5C;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "HealthWatchApp-Watch-App-Info.plist";
@@ -475,13 +479,13 @@
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "HealthWatch needs access to your health data to monitor vitals and sync them with your care team.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "This app does not write health data. This permission is reserved for future use.";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
-				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.habib..HealthWatch;
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.habib.HealthWatch;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.habib..HealthWatch.watchkitapp;
+				PRODUCT_BUNDLE_IDENTIFIER = com.habib.HealthWatch.watchkitapp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
@@ -504,7 +508,7 @@
 				CODE_SIGN_ENTITLEMENTS = "HealthWatchApp Watch App/HealthWatchApp Watch App.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = ZCH2J3JR2Z;
+				DEVELOPMENT_TEAM = YJ4N7HRX5C;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "HealthWatchApp-Watch-App-Info.plist";
@@ -513,13 +517,13 @@
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "HealthWatch needs access to your health data to monitor vitals and sync them with your care team.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "This app does not write health data. This permission is reserved for future use.";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
-				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.habib..HealthWatch;
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.habib.HealthWatch;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.habib..HealthWatch.watchkitapp;
+				PRODUCT_BUNDLE_IDENTIFIER = com.habib.HealthWatch.watchkitapp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
