@@ -15,65 +15,17 @@ struct ProvisioningView: View {
                 case .selectIndividual:
                     individualSelectionView
 
-                case .checkingWatchConnection:
-                    ProvisioningStatusView(
-                        icon: "applewatch",
-                        title: "Checking Watch Connection",
-                        subtitle: "Looking for paired Apple Watch...",
-                        isLoading: true
-                    )
+                case .scanningQR:
+                    scannerView
 
-                case .watchNotReachable:
-                    ProvisioningStatusView(
-                        icon: "applewatch.slash",
-                        title: "Watch Not Reachable",
-                        subtitle: "Make sure the Apple Watch is nearby, unlocked, and the HealthWatch app is installed.",
-                        isLoading: false,
-                        actionTitle: "Try Again"
-                    ) {
-                        Task { await viewModel.initiateProvisioning() }
-                    }
+                case .enteringCode:
+                    codeEntryView
 
-                case .displayingCode(let code, let expiresAt):
-                    CodeDisplayView(code: code, expiresAt: expiresAt)
-
-                case .waitingForCodeEntry:
-                    ProvisioningStatusView(
-                        icon: "keyboard",
-                        title: "Enter Code on Watch",
-                        subtitle: "Enter the 4-digit code shown above on the Apple Watch to confirm.",
-                        isLoading: true
-                    )
-
-                case .verifyingCode:
-                    ProvisioningStatusView(
-                        icon: "checkmark.shield",
-                        title: "Verifying Code",
-                        subtitle: "Checking the entered code...",
-                        isLoading: true
-                    )
-
-                case .codeAccepted:
-                    ProvisioningStatusView(
-                        icon: "checkmark.circle",
-                        title: "Code Accepted",
-                        subtitle: "Sending configuration to watch...",
-                        isLoading: true
-                    )
-
-                case .codeFailed(let attemptsRemaining):
-                    ProvisioningStatusView(
-                        icon: "xmark.circle",
-                        title: "Incorrect Code",
-                        subtitle: "\(attemptsRemaining) attempt\(attemptsRemaining == 1 ? "" : "s") remaining. Ask the wearer to try again.",
-                        isLoading: false
-                    )
-
-                case .sendingConfig:
+                case .registeringDevice:
                     ProvisioningStatusView(
                         icon: "arrow.triangle.2.circlepath",
-                        title: "Sending Configuration",
-                        subtitle: "Transferring settings to the watch...",
+                        title: "Registering Device",
+                        subtitle: "Mapping the watch to \(viewModel.selectedIndividual?.name ?? "individual")...",
                         isLoading: true
                     )
 
@@ -86,17 +38,8 @@ struct ProvisioningView: View {
                         iconColor: .green,
                         actionTitle: "Done"
                     ) {
-                        Task { await viewModel.retryProvisioning() }
+                        viewModel.startOver()
                     }
-
-                case .locked(let unlockAt):
-                    ProvisioningStatusView(
-                        icon: "lock.fill",
-                        title: "Too Many Attempts",
-                        subtitle: "Provisioning is locked. Try again after \(unlockAt.formatted(date: .omitted, time: .shortened)).",
-                        isLoading: false,
-                        iconColor: .red
-                    )
 
                 case .error(let message):
                     ProvisioningStatusView(
@@ -107,13 +50,103 @@ struct ProvisioningView: View {
                         iconColor: .orange,
                         actionTitle: "Start Over"
                     ) {
-                        Task { await viewModel.retryProvisioning() }
+                        viewModel.startOver()
                     }
                 }
             }
             .navigationTitle("Provision Watch")
             .animation(.default, value: viewModel.state)
         }
+    }
+
+    // MARK: - QR Scanner
+
+    private var scannerView: some View {
+        ZStack(alignment: .bottom) {
+            QRScannerView(
+                onCodeScanned: { payload in
+                    Task { await viewModel.handleScannedQR(payload: payload) }
+                },
+                onError: { error in
+                    viewModel.state = .error(error)
+                }
+            )
+            .ignoresSafeArea()
+
+            VStack(spacing: 12) {
+                Text("Point camera at the QR code on the Apple Watch")
+                    .font(.subheadline.bold())
+                    .foregroundStyle(.white)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+                    .padding(.vertical, 8)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
+
+                Button("Cancel") {
+                    viewModel.startOver()
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.gray)
+            }
+            .padding(.bottom, 40)
+        }
+    }
+
+    // MARK: - Code Entry
+
+    private var codeEntryView: some View {
+        VStack(spacing: 24) {
+            Spacer()
+
+            Image(systemName: "applewatch")
+                .font(.system(size: 48))
+                .foregroundStyle(.blue)
+
+            Text("Enter Pairing Code")
+                .font(.title2.bold())
+
+            Text("Enter the code displayed on the Apple Watch")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+
+            TextField("XXXX-XXXX", text: $viewModel.deviceCodeInput)
+                .font(.system(size: 32, weight: .bold, design: .monospaced))
+                .multilineTextAlignment(.center)
+                .textInputAutocapitalization(.characters)
+                .autocorrectionDisabled()
+                .keyboardType(.asciiCapable)
+                .padding()
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color(.systemGray6))
+                )
+                .padding(.horizontal, 40)
+
+            Button {
+                Task { await viewModel.submitDeviceCode() }
+            } label: {
+                HStack {
+                    Spacer()
+                    Label("Register Device", systemImage: "checkmark.circle")
+                        .font(.headline)
+                    Spacer()
+                }
+                .padding(.vertical, 12)
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(viewModel.deviceCodeInput.replacingOccurrences(of: "-", with: "").replacingOccurrences(of: " ", with: "").count < 8)
+            .padding(.horizontal)
+
+            Button("Cancel") {
+                viewModel.startOver()
+            }
+            .foregroundStyle(.secondary)
+
+            Spacer()
+        }
+        .padding()
     }
 
     // MARK: - Individual Selection
@@ -191,12 +224,25 @@ struct ProvisioningView: View {
 
             Section {
                 Button {
-                    Task { await viewModel.initiateProvisioning() }
+                    viewModel.beginScanning()
                 } label: {
                     HStack {
                         Spacer()
-                        Label("Begin Provisioning", systemImage: "applewatch.and.arrow.forward")
+                        Label("Scan QR Code", systemImage: "qrcode.viewfinder")
                             .font(.headline)
+                        Spacer()
+                    }
+                }
+                .disabled(viewModel.selectedIndividual == nil)
+
+                Button {
+                    viewModel.beginCodeEntry()
+                } label: {
+                    HStack {
+                        Spacer()
+                        Label("Enter Code Manually", systemImage: "keyboard")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                         Spacer()
                     }
                 }
@@ -206,7 +252,7 @@ struct ProvisioningView: View {
         .alert("Remove Provisioning?", isPresented: $viewModel.showRemoveConfirmation) {
             Button("Cancel", role: .cancel) {}
             Button("Remove", role: .destructive) {
-                viewModel.removeProvisioning()
+                Task { await viewModel.removeProvisioning() }
             }
         } message: {
             Text("This will unpair the Apple Watch and stop health data collection. The watch will need to be provisioned again.")

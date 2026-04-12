@@ -39,6 +39,8 @@ struct WatchErrorView: View {
             return "externaldrive.badge.xmark"
         case .configCorrupted:
             return "gearshape.arrow.triangle.2.circlepath"
+        case .keychainFailed:
+            return "lock.trianglebadge.exclamationmark"
         }
     }
 
@@ -54,6 +56,8 @@ struct WatchErrorView: View {
             return "Storage Full"
         case .configCorrupted:
             return "Configuration Error"
+        case .keychainFailed:
+            return "Keychain Error"
         }
     }
 
@@ -69,6 +73,8 @@ struct WatchErrorView: View {
             return "Local storage is full. Data will be cleared automatically."
         case .configCorrupted:
             return "Configuration is invalid. Re-provision from iPhone."
+        case .keychainFailed:
+            return "Failed to save credentials. Try provisioning again."
         }
     }
 }

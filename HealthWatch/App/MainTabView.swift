@@ -17,7 +17,7 @@ struct MainTabView: View {
 
             ProvisioningView(watchManager: watchManager)
                 .tabItem {
-                    Label("Provision", systemImage: "applewatch.and.arrow.forward")
+                    Label("Provision", systemImage: "qrcode.viewfinder")
                 }
 
             SettingsView()

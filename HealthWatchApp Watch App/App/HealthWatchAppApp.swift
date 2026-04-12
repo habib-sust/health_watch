@@ -10,10 +10,10 @@ struct HealthWatchApp_Watch_AppApp: App {
             Group {
                 switch appState.mode {
                 case .unprovisioned:
-                    AwaitingSetupView()
+                    WatchUnprovisionedView()
 
-                case .provisioning(let message):
-                    WatchCodeEntryView(individualName: message.individualName)
+                case .showingCode(let deviceCode):
+                    WatchProvisionCodeView(deviceCode: deviceCode)
 
                 case .provisioned:
                     WatchProvisionedTabView()
@@ -33,21 +33,5 @@ struct HealthWatchApp_Watch_AppApp: App {
     private func setupConnectivity() {
         let handler = WatchConnectivityHandler.shared
         handler.activate()
-
-        handler.onProvisioningInitiated = { message in
-            Task { @MainActor in
-                appState.beginProvisioning(with: message)
-            }
-        }
-
-        handler.onConfigReceived = { message in
-            Task { @MainActor in
-                appState.completeProvisioning(individualName: message.individualName)
-            }
-        }
-
-        handler.onCodeFailed = {
-            // Watch stays on code entry view — user can retry
-        }
     }
 }

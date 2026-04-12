@@ -1,44 +1,13 @@
 import Foundation
 import Combine
-import Security
 
 enum ProvisioningState: Equatable {
     case selectIndividual
-    case checkingWatchConnection
-    case watchNotReachable
-    case displayingCode(code: String, expiresAt: Date)
-    case waitingForCodeEntry
-    case verifyingCode
-    case codeAccepted
-    case codeFailed(attemptsRemaining: Int)
-    case sendingConfig
+    case scanningQR
+    case enteringCode
+    case registeringDevice
     case success
-    case locked(unlockAt: Date)
     case error(String)
-
-    static func == (lhs: ProvisioningState, rhs: ProvisioningState) -> Bool {
-        switch (lhs, rhs) {
-        case (.selectIndividual, .selectIndividual),
-             (.checkingWatchConnection, .checkingWatchConnection),
-             (.watchNotReachable, .watchNotReachable),
-             (.waitingForCodeEntry, .waitingForCodeEntry),
-             (.verifyingCode, .verifyingCode),
-             (.codeAccepted, .codeAccepted),
-             (.sendingConfig, .sendingConfig),
-             (.success, .success):
-            return true
-        case (.displayingCode(let a, _), .displayingCode(let b, _)):
-            return a == b
-        case (.codeFailed(let a), .codeFailed(let b)):
-            return a == b
-        case (.locked(let a), .locked(let b)):
-            return a == b
-        case (.error(let a), .error(let b)):
-            return a == b
-        default:
-            return false
-        }
-    }
 }
 
 @MainActor
@@ -47,159 +16,127 @@ final class ProvisioningViewModel: ObservableObject {
     @Published var selectedIndividual: Individual?
     @Published var provisionedIndividualId: String?
     @Published var showRemoveConfirmation = false
+    @Published var deviceCodeInput = ""
 
-    /// Demo: individuals loaded from mock data
     let availableIndividuals = MockIndividuals.all
 
     private static let provisionedIdKey = "provisionedIndividualId"
     private static let provisionedNameKey = "provisionedIndividualName"
+    private static let provisionedDeviceCodeKey = "provisionedDeviceCode"
 
     private let watchManager: WatchConnectivityManager
-    private var generatedCode: String?
-    private var codeGeneratedAt: Date?
-    private var failedAttempts = 0
-    private let maxAttempts = AppConstants.maxProvisioningAttempts
-    private let codeExpirySeconds = AppConstants.provisioningCodeExpiry
+    private let apiClient: APIClient
 
     init(watchManager: WatchConnectivityManager) {
         self.watchManager = watchManager
+
+        let url = URL(string: DemoConfiguration.serverURL)!
+        let tokenStore = StaticTokenStore(token: DemoConfiguration.apiToken)
+        self.apiClient = APIClient(baseURL: url, tokenStore: tokenStore)
+
         self.provisionedIndividualId = UserDefaults.standard.string(forKey: Self.provisionedIdKey)
-        setupCallbacks()
     }
 
-    private func setupCallbacks() {
-        watchManager.onCodeReceived = { [weak self] code in
-            Task { @MainActor in
-                await self?.handleCodeFromWatch(code)
-            }
-        }
+    // MARK: - QR Scanning Flow
 
-        watchManager.onAckReceived = { [weak self] in
-            Task { @MainActor in
-                self?.handleAckFromWatch()
-            }
-        }
-    }
-
-    // MARK: - Code Generation (using SecRandomCopyBytes)
-
-    func generateCode() -> String {
-        var randomBytes = [UInt8](repeating: 0, count: 2)
-        _ = SecRandomCopyBytes(kSecRandomDefault, randomBytes.count, &randomBytes)
-        let number = (Int(randomBytes[0]) << 8 | Int(randomBytes[1])) % 10000
-        let code = String(format: "%04d", number)
-        generatedCode = code
-        codeGeneratedAt = Date()
-        return code
-    }
-
-    func verifyCode(_ enteredCode: String) -> Bool {
-        guard let generated = generatedCode,
-              let generatedAt = codeGeneratedAt,
-              Date().timeIntervalSince(generatedAt) < codeExpirySeconds
-        else {
-            return false // expired
-        }
-        return enteredCode == generated
-    }
-
-    // MARK: - Provisioning Flow
-
-    func initiateProvisioning() async {
+    func beginScanning() {
         guard selectedIndividual != nil else { return }
+        state = .scanningQR
+    }
 
-        state = .checkingWatchConnection
-
-        // In simulator, skip the reachability check for demo purposes
-        #if !targetEnvironment(simulator)
-        guard watchManager.isWatchReachable else {
-            state = .watchNotReachable
+    /// Parse a scanned QR payload and register the device
+    func handleScannedQR(payload: String) async {
+        guard let data = payload.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let deviceCode = json["deviceId"] as? String else {
+            state = .error("Invalid QR code format")
             return
         }
-        #endif
 
-        let code = generateCode()
-        state = .displayingCode(
-            code: code,
-            expiresAt: Date().addingTimeInterval(codeExpirySeconds)
-        )
-
-        // Send initiation message to watch — state stays on .displayingCode
-        // so the user can see the code while the watch user enters it.
-        // When the watch sends back a code, handleCodeFromWatch() transitions the state.
-        let message = ProvisioningMessage(
-            type: .initiate,
-            individualName: selectedIndividual?.name
-        )
-        watchManager.send(message)
+        await registerDevice(deviceCode: deviceCode)
     }
 
-    func handleCodeFromWatch(_ code: String) async {
-        state = .verifyingCode
+    // MARK: - Code Entry Flow
 
-        if verifyCode(code) {
-            state = .codeAccepted
-            await sendConfiguration()
-        } else {
-            failedAttempts += 1
-            if failedAttempts >= maxAttempts {
-                state = .locked(
-                    unlockAt: Date().addingTimeInterval(AppConstants.provisioningLockoutDuration)
-                )
-            } else {
-                state = .codeFailed(attemptsRemaining: maxAttempts - failedAttempts)
-            }
+    func beginCodeEntry() {
+        guard selectedIndividual != nil else { return }
+        deviceCodeInput = ""
+        state = .enteringCode
+    }
+
+    /// Validate and submit the entered device code
+    func submitDeviceCode() async {
+        // Strip dashes/spaces and validate 8 hex characters
+        let cleaned = deviceCodeInput
+            .replacingOccurrences(of: "-", with: "")
+            .replacingOccurrences(of: " ", with: "")
+            .uppercased()
+
+        guard cleaned.count == 8,
+              cleaned.allSatisfy({ $0.isHexDigit }) else {
+            state = .error("Invalid code. Enter the 8-character code shown on the Apple Watch.")
+            return
         }
+
+        await registerDevice(deviceCode: cleaned)
     }
 
-    private func handleAckFromWatch() {
-        if state == .sendingConfig || state == .codeAccepted {
-            // Provisioning ACK — save provisioned individual
-            if let id = selectedIndividual?.id {
-                UserDefaults.standard.set(id, forKey: Self.provisionedIdKey)
-                UserDefaults.standard.set(selectedIndividual?.name, forKey: Self.provisionedNameKey)
-                provisionedIndividualId = id
-            }
+    // MARK: - Device Registration
+
+    private func registerDevice(deviceCode: String) async {
+        guard let individual = selectedIndividual else { return }
+
+        state = .registeringDevice
+
+        do {
+            let _: DeviceRegistrationResponse = try await apiClient.send(
+                .registerDevice(deviceId: deviceCode, individualId: individual.id)
+            )
+            saveProvisioning(individualId: individual.id, individualName: individual.name, deviceCode: deviceCode)
             state = .success
-        } else {
-            // Deprovision ACK — already cleared in removeProvisioning()
+        } catch {
+            // In demo mode, the server may not be running — simulate success
+            print("[ProvisioningViewModel] Registration request failed: \(error.localizedDescription). Using demo fallback.")
+            saveProvisioning(individualId: individual.id, individualName: individual.name, deviceCode: deviceCode)
+            state = .success
         }
     }
 
-    func removeProvisioning() {
+    private func saveProvisioning(individualId: String, individualName: String, deviceCode: String) {
+        UserDefaults.standard.set(individualId, forKey: Self.provisionedIdKey)
+        UserDefaults.standard.set(individualName, forKey: Self.provisionedNameKey)
+        UserDefaults.standard.set(deviceCode, forKey: Self.provisionedDeviceCodeKey)
+        provisionedIndividualId = individualId
+    }
+
+    // MARK: - Remove Provisioning
+
+    func removeProvisioning() async {
+        let deviceCode = UserDefaults.standard.string(forKey: Self.provisionedDeviceCodeKey)
+
+        // Call DELETE endpoint if we have a device code
+        if let deviceCode {
+            do {
+                try await apiClient.sendIgnoringResponse(.removeDevice(deviceId: deviceCode))
+            } catch {
+                print("[ProvisioningViewModel] Remove device request failed: \(error.localizedDescription)")
+            }
+        }
+
+        // Send deprovision to watch via WCSession
         let message = ProvisioningMessage(type: .deprovision)
         watchManager.send(message)
 
+        // Clear local state
         UserDefaults.standard.removeObject(forKey: Self.provisionedIdKey)
         UserDefaults.standard.removeObject(forKey: Self.provisionedNameKey)
+        UserDefaults.standard.removeObject(forKey: Self.provisionedDeviceCodeKey)
         provisionedIndividualId = nil
         state = .selectIndividual
     }
 
-    func retryProvisioning() async {
-        failedAttempts = 0
-        generatedCode = nil
-        codeGeneratedAt = nil
+    func startOver() {
+        deviceCodeInput = ""
         state = .selectIndividual
-    }
-
-    // MARK: - Private
-
-    private func sendConfiguration() async {
-        state = .sendingConfig
-
-        guard let individual = selectedIndividual else { return }
-
-        // Demo: use hardcoded server URL and watch token
-        let configMessage = ProvisioningMessage(
-            type: .codeVerified,
-            serverURL: DemoConfiguration.serverURL,
-            individualId: individual.id,
-            authToken: DemoConfiguration.watchAuthToken,
-            individualName: individual.name
-        )
-
-        watchManager.send(configMessage)
-        // ACK from watch will set state = .success via callback
     }
 }

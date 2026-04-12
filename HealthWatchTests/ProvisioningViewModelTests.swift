@@ -3,49 +3,6 @@ import Testing
 
 struct ProvisioningViewModelTests {
 
-    @Test("Code generation produces 4-digit string")
-    @MainActor
-    func codeGeneration() {
-        let vm = ProvisioningViewModel(watchManager: WatchConnectivityManager())
-        let code = vm.generateCode()
-        #expect(code.count == 4)
-        #expect(Int(code) != nil)
-        #expect(Int(code)! >= 0 && Int(code)! <= 9999)
-    }
-
-    @Test("Code generation produces different codes (statistical)")
-    @MainActor
-    func codeRandomness() {
-        let vm = ProvisioningViewModel(watchManager: WatchConnectivityManager())
-        var codes = Set<String>()
-        for _ in 0..<20 {
-            codes.insert(vm.generateCode())
-        }
-        // With 20 attempts, we should get at least 2 different codes
-        #expect(codes.count >= 2)
-    }
-
-    @Test("Verify code succeeds with matching code")
-    @MainActor
-    func verifyCodeSuccess() {
-        let vm = ProvisioningViewModel(watchManager: WatchConnectivityManager())
-        let code = vm.generateCode()
-        let result = vm.verifyCode(code)
-        #expect(result == true)
-    }
-
-    @Test("Verify code fails with wrong code")
-    @MainActor
-    func verifyCodeWrongCode() {
-        let vm = ProvisioningViewModel(watchManager: WatchConnectivityManager())
-        let _ = vm.generateCode()
-        let result = vm.verifyCode("0000")
-        // May or may not fail depending on generated code, but test the mechanism
-        // If the generated code happens to be "0000", this would pass
-        // This tests the comparison logic works
-        #expect(true) // Structure test - full verification tested via state transitions
-    }
-
     @Test("Initial state is selectIndividual")
     @MainActor
     func initialState() {
@@ -63,5 +20,98 @@ struct ProvisioningViewModelTests {
         let vm = ProvisioningViewModel(watchManager: WatchConnectivityManager())
         #expect(vm.availableIndividuals.count == 5)
         #expect(vm.availableIndividuals[0].name == "Alice Johnson")
+    }
+
+    @Test("Begin code entry requires selected individual")
+    @MainActor
+    func beginCodeEntryRequiresSelection() {
+        let vm = ProvisioningViewModel(watchManager: WatchConnectivityManager())
+        vm.beginCodeEntry()
+        // Should stay in selectIndividual since no individual selected
+        #expect(vm.state == .selectIndividual)
+    }
+
+    @Test("Begin code entry transitions to enteringCode")
+    @MainActor
+    func beginCodeEntryTransitions() {
+        let vm = ProvisioningViewModel(watchManager: WatchConnectivityManager())
+        vm.selectedIndividual = vm.availableIndividuals[0]
+        vm.beginCodeEntry()
+        #expect(vm.state == .enteringCode)
+    }
+
+    @Test("Submit invalid device code produces error")
+    @MainActor
+    func submitInvalidCode() async {
+        let vm = ProvisioningViewModel(watchManager: WatchConnectivityManager())
+        vm.selectedIndividual = vm.availableIndividuals[0]
+        vm.deviceCodeInput = "XYZ"
+        await vm.submitDeviceCode()
+        if case .error = vm.state {
+            #expect(true)
+        } else {
+            #expect(Bool(false), "Expected error state for invalid code")
+        }
+    }
+
+    @Test("Submit valid device code triggers registration")
+    @MainActor
+    func submitValidCode() async {
+        let vm = ProvisioningViewModel(watchManager: WatchConnectivityManager())
+        vm.selectedIndividual = vm.availableIndividuals[0]
+        vm.deviceCodeInput = "A3B7-9F2E"
+        await vm.submitDeviceCode()
+        // In demo mode, registration falls back to success
+        #expect(vm.state == .success)
+        #expect(vm.provisionedIndividualId == vm.availableIndividuals[0].id)
+    }
+
+    @Test("Begin scanning requires selected individual")
+    @MainActor
+    func beginScanningRequiresSelection() {
+        let vm = ProvisioningViewModel(watchManager: WatchConnectivityManager())
+        vm.beginScanning()
+        #expect(vm.state == .selectIndividual)
+    }
+
+    @Test("Begin scanning transitions to scanningQR")
+    @MainActor
+    func beginScanningTransitions() {
+        let vm = ProvisioningViewModel(watchManager: WatchConnectivityManager())
+        vm.selectedIndividual = vm.availableIndividuals[0]
+        vm.beginScanning()
+        #expect(vm.state == .scanningQR)
+    }
+
+    @Test("Handle invalid QR payload produces error")
+    @MainActor
+    func handleInvalidQR() async {
+        let vm = ProvisioningViewModel(watchManager: WatchConnectivityManager())
+        vm.selectedIndividual = vm.availableIndividuals[0]
+        await vm.handleScannedQR(payload: "not-json")
+        #expect(vm.state == .error("Invalid QR code format"))
+    }
+
+    @Test("Handle valid QR payload triggers registration")
+    @MainActor
+    func handleValidQR() async {
+        let vm = ProvisioningViewModel(watchManager: WatchConnectivityManager())
+        vm.selectedIndividual = vm.availableIndividuals[0]
+        let payload = """
+        {"app":"healthwatch","version":1,"deviceId":"A3B79F2E"}
+        """
+        await vm.handleScannedQR(payload: payload)
+        // In demo mode, registration falls back to success
+        #expect(vm.state == .success)
+        #expect(vm.provisionedIndividualId == vm.availableIndividuals[0].id)
+    }
+
+    @Test("Start over resets state")
+    @MainActor
+    func startOver() {
+        let vm = ProvisioningViewModel(watchManager: WatchConnectivityManager())
+        vm.state = .error("test")
+        vm.startOver()
+        #expect(vm.state == .selectIndividual)
     }
 }

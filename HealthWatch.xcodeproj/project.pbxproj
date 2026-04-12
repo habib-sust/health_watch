@@ -10,6 +10,8 @@
 		175791FE2F7EC6C2007E0116 /* HealthWatch_Project_Specification_1.md in Resources */ = {isa = PBXBuildFile; fileRef = 175791FD2F7EC6C2007E0116 /* HealthWatch_Project_Specification_1.md */; };
 		175792002F7EC6CB007E0116 /* HealthWatch_Implementation_Guide_Demo.md in Resources */ = {isa = PBXBuildFile; fileRef = 175791FF2F7EC6CB007E0116 /* HealthWatch_Implementation_Guide_Demo.md */; };
 		1757920F2F7EC7B8007E0116 /* HealthWatchApp Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 175792052F7EC7B7007E0116 /* HealthWatchApp Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		176ECAE92F869C2600D03B45 /* HealthWatch_QR_Provisioning_Spec.md in Resources */ = {isa = PBXBuildFile; fileRef = 176ECAE82F869C2600D03B45 /* HealthWatch_QR_Provisioning_Spec.md */; };
+		176ECAEB2F869C6800D03B45 /* HealthWatch_QR_Provisioning_Implementation.md in Resources */ = {isa = PBXBuildFile; fileRef = 176ECAEA2F869C6800D03B45 /* HealthWatch_QR_Provisioning_Implementation.md */; };
 		17F8250B2F7F8B600080E4EE /* HealthWatch_Implementation_Steps.md in Resources */ = {isa = PBXBuildFile; fileRef = 17F8250A2F7F8B600080E4EE /* HealthWatch_Implementation_Steps.md */; };
 		17F825DB2F8170BD0080E4EE /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = 17F825DA2F8170BD0080E4EE /* README.md */; };
 		17F826822F81781C0080E4EE /* HealthWatch_Provisioning_Flow.md in Resources */ = {isa = PBXBuildFile; fileRef = 17F826812F81781C0080E4EE /* HealthWatch_Provisioning_Flow.md */; };
@@ -44,6 +46,8 @@
 		175791FD2F7EC6C2007E0116 /* HealthWatch_Project_Specification_1.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = HealthWatch_Project_Specification_1.md; sourceTree = "<group>"; };
 		175791FF2F7EC6CB007E0116 /* HealthWatch_Implementation_Guide_Demo.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = HealthWatch_Implementation_Guide_Demo.md; sourceTree = "<group>"; };
 		175792052F7EC7B7007E0116 /* HealthWatchApp Watch App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "HealthWatchApp Watch App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		176ECAE82F869C2600D03B45 /* HealthWatch_QR_Provisioning_Spec.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = HealthWatch_QR_Provisioning_Spec.md; sourceTree = "<group>"; };
+		176ECAEA2F869C6800D03B45 /* HealthWatch_QR_Provisioning_Implementation.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = HealthWatch_QR_Provisioning_Implementation.md; sourceTree = "<group>"; };
 		17F8250A2F7F8B600080E4EE /* HealthWatch_Implementation_Steps.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = HealthWatch_Implementation_Steps.md; sourceTree = "<group>"; };
 		17F825CA2F8041200080E4EE /* KeychainManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainManagerTests.swift; sourceTree = "<group>"; };
 		17F825CB2F80412D0080E4EE /* ProvisioningViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProvisioningViewModelTests.swift; sourceTree = "<group>"; };
@@ -112,6 +116,8 @@
 				17F8250A2F7F8B600080E4EE /* HealthWatch_Implementation_Steps.md */,
 				17F825C92F8041150080E4EE /* HealthWatchTests */,
 				17F826812F81781C0080E4EE /* HealthWatch_Provisioning_Flow.md */,
+				176ECAE82F869C2600D03B45 /* HealthWatch_QR_Provisioning_Spec.md */,
+				176ECAEA2F869C6800D03B45 /* HealthWatch_QR_Provisioning_Implementation.md */,
 			);
 			sourceTree = "<group>";
 		};
@@ -231,9 +237,11 @@
 			buildActionMask = 2147483647;
 			files = (
 				175792002F7EC6CB007E0116 /* HealthWatch_Implementation_Guide_Demo.md in Resources */,
+				176ECAE92F869C2600D03B45 /* HealthWatch_QR_Provisioning_Spec.md in Resources */,
 				17F825DB2F8170BD0080E4EE /* README.md in Resources */,
 				17F8250B2F7F8B600080E4EE /* HealthWatch_Implementation_Steps.md in Resources */,
 				17F826822F81781C0080E4EE /* HealthWatch_Provisioning_Flow.md in Resources */,
+				176ECAEB2F869C6800D03B45 /* HealthWatch_QR_Provisioning_Implementation.md in Resources */,
 				175791FE2F7EC6C2007E0116 /* HealthWatch_Project_Specification_1.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

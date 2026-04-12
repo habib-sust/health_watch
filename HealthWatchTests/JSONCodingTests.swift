@@ -56,22 +56,12 @@ struct JSONCodingTests {
 
     @Test("ProvisioningMessage encodes and decodes")
     func provisioningMessageCoding() throws {
-        let message = ProvisioningMessage(
-            type: .initiate,
-            code: nil,
-            serverURL: nil,
-            individualId: nil,
-            authToken: nil,
-            individualName: "Alice Johnson",
-            timestamp: Date()
-        )
+        let message = ProvisioningMessage(type: .deprovision)
 
         let data = try JSONEncoder.healthWatch.encode(message)
         let decoded = try JSONDecoder.healthWatch.decode(ProvisioningMessage.self, from: data)
 
-        #expect(decoded.type == .initiate)
-        #expect(decoded.individualName == "Alice Johnson")
-        #expect(decoded.code == nil)
+        #expect(decoded.type == .deprovision)
     }
 
     @Test("ISO8601 date encoding format")

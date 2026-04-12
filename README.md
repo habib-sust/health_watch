@@ -10,7 +10,7 @@ iOS App (HealthWatch)          watchOS App (HealthWatchApp Watch App)
 Dashboard                      HealthKit collection (background)
 Alerts                         CoreData local buffer
 Settings                       Background URL session push
-Provisioning flow  ──WCSession──  Provisioning flow
+Provisioning flow  ──Server──  Provisioning flow
 ```
 
 ## Features
@@ -19,7 +19,7 @@ Provisioning flow  ──WCSession──  Provisioning flow
 - **Dashboard** — card-based view of all monitored individuals with live status indicators
 - **Individual detail** — per-metric charts and historical readings
 - **Alerts** — surfaced anomalies from the backend
-- **Provisioning** — generates a 4-digit code to pair a Watch to an individual record
+- **Provisioning** — scan a QR code or enter a device code to link a Watch to an individual record via server-side mapping
 
 ### watchOS
 - **HealthKit collection** — heart rate, resting heart rate, HRV, SpO2, step count, active energy, respiratory rate, walking heart rate average, and sleep analysis
@@ -34,21 +34,19 @@ Provisioning flow  ──WCSession──  Provisioning flow
 ### Provisioning flow
 
 ```
-iOS shows 4-digit code
+Watch shows device code (8-char hex)
        │
-       ▼ (WCSession .initiate message)
-Watch displays code entry prompt
+       ▼ Watch polls GET /api/v1/device/{id}/config every 5s
+iOS selects individual, scans QR code or enters code manually
        │
-       ▼ (user enters code; WCSession .codeEntry message)
-iOS verifies code against backend → POST /api/v1/individuals/{id}/provision
+       ▼ POST /api/v1/device/register { deviceId, individualId }
+Server stores device-to-individual mapping
        │
-       ├─ success ▶ WCSession .codeVerified  (serverURL + individualId + authToken)
-       │              Watch stores config in Keychain, transitions to .provisioned
-       │
-       └─ failure ▶ WCSession .codeFailed    (up to 3 attempts; 5 min lockout)
+       ▼ Watch poll returns "provisioned" with config
+Watch stores config in Keychain, transitions to .provisioned
 ```
 
-Code expires after **120 seconds**. After **3 failed attempts** the Watch is locked out for **5 minutes**.
+No WCSession dependency for provisioning — any iPhone with the app can provision any Watch. Polling times out after **5 minutes**.
 
 ### Data push pipeline (watchOS)
 
@@ -67,7 +65,7 @@ Code expires after **120 seconds**. After **3 failed attempts** the Watch is loc
 | `APIClient` | iOS | Swift `actor`; async/await; Bearer token auth |
 | `WatchConnectivityManager` | iOS | WCSession delegate; sends/receives `ProvisioningMessage` |
 | `WatchConnectivityHandler` | watchOS | WCSession delegate; drives `WatchAppState` transitions |
-| `WatchAppState` | watchOS | Observable state machine: `.unprovisioned` / `.provisioning` / `.provisioned` / `.error` |
+| `WatchAppState` | watchOS | Observable state machine: `.unprovisioned` / `.showingCode` / `.provisioned` / `.error` |
 | `HealthKitCollector` | watchOS | Authorization, observer queries, anchored fetches, deduplication |
 | `LocalBufferManager` | watchOS | CoreData read/write for offline sample buffer |
 | `DataPushService` | watchOS | Assembles batch, background URL session upload |
@@ -84,7 +82,7 @@ HealthWatch/
 │   ├── IndividualDetail/       Charts, MetricRowView
 │   ├── Alerts/                 AlertsView, AlertsViewModel
 │   ├── Settings/               SettingsView
-│   └── Provisioning/           CodeDisplayView, ProvisioningViewModel
+│   └── Provisioning/           QRScannerView, ProvisioningViewModel
 ├── Shared/
 │   ├── Models/                 HealthSample, HealthPayload, ProvisioningMessage, Individual
 │   ├── Networking/             APIClient, Endpoint, RetryPolicy, JSONCoders
@@ -96,13 +94,14 @@ HealthWatch/
 HealthWatchApp Watch App/
 ├── App/                        Entry point, ExtensionDelegate
 ├── Features/
-│   ├── Provisioning/           AwaitingSetupView, WatchCodeEntryView, WatchErrorView
+│   ├── Provisioning/           WatchUnprovisionedView, WatchProvisionCodeView, WatchErrorView
 │   ├── Status/                 WatchStatusView
 │   └── HealthData/             WatchHealthDataView, WatchMetricCardView, WatchProvisionedTabView
 ├── Persistence/                CoreDataStack, BufferedHealthSample
 ├── Services/                   HealthKitCollector, DataPushService, LocalBufferManager,
 │                               BackgroundTaskScheduler, HeartbeatService,
-│                               WatchConnectivityHandler, WatchAppState, WatchLogger
+│                               DeviceConfigPoller, WatchConnectivityHandler,
+│                               WatchAppState, WatchLogger
 └── Shared/                     (mirrors iOS shared layer)
 
 HealthWatchTests/
@@ -138,7 +137,7 @@ HealthWatchTests/
 3. Set `DemoConfiguration.serverURL` to point at your backend.
 4. Build and run the **HealthWatch** scheme on an iPhone simulator or device.
 5. Build and run the **HealthWatchApp Watch App** scheme on a paired Watch.
-6. On the iPhone, navigate to a patient record and tap **Provision Watch** to begin pairing.
+6. On the Watch, tap **Provision** to display a device code. On the iPhone, open the Provisioning tab, select an individual, and scan the code or enter it manually.
 
 ## Testing
 

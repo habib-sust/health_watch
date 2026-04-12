@@ -5,7 +5,6 @@ import WatchConnectivity
 final class WatchConnectivityManager: NSObject, ObservableObject {
     @Published var isReachable = false
     private var session: WCSession?
-    var onCodeReceived: ((String) -> Void)?
     var onAckReceived: (() -> Void)?
 
     override init() {
@@ -55,10 +54,6 @@ extension WatchConnectivityManager: WCSessionDelegate {
         else { return }
 
         switch msg.type {
-        case .codeEntry:
-            if let code = msg.code {
-                DispatchQueue.main.async { self.onCodeReceived?(code) }
-            }
         case .ack:
             DispatchQueue.main.async { self.onAckReceived?() }
         default:

@@ -1,9 +1,10 @@
 import SwiftUI
 import Combine
+import WatchKit
 
 enum WatchMode {
     case unprovisioned
-    case provisioning(ProvisioningMessage)
+    case showingCode(deviceCode: String)
     case provisioned
     case error(WatchError)
 }
@@ -36,17 +37,64 @@ final class WatchAppState: ObservableObject {
         }
     }
 
-    func beginProvisioning(with message: ProvisioningMessage) {
-        mode = .provisioning(message)
+    /// Generate a pairing code and transition to code display mode
+    func beginProvisioning() {
+        let code = Self.getOrCreateDeviceCode()
+        mode = .showingCode(deviceCode: code)
     }
 
-    func completeProvisioning(individualName name: String?) {
-        individualName = name
-        if let name {
+    /// Cancel provisioning and return to unprovisioned
+    func cancelProvisioning() {
+        mode = .unprovisioned
+    }
+
+    /// Complete provisioning with config received from server polling
+    func completeProvisioning(with config: DeviceConfigResponse) {
+        guard let serverURL = config.serverURL,
+              let individualId = config.individualId,
+              let authToken = config.authToken else {
+            print("[WatchAppState] Incomplete provisioning config")
+            return
+        }
+
+        do {
+            try keychain.saveServerURL(serverURL)
+            try keychain.saveIndividualId(individualId)
+            try keychain.saveAuthToken(authToken)
+        } catch {
+            print("[WatchAppState] Keychain save failed: \(error.localizedDescription)")
+            handleError(.keychainFailed)
+            return
+        }
+
+        individualName = config.individualName
+        if let name = config.individualName {
             UserDefaults.standard.set(name, forKey: "provisionedIndividualName")
         }
         mode = .provisioned
         startDataCollection()
+    }
+
+    // MARK: - Device Code
+
+    /// Get or create a persistent 8-character device code used for pairing
+    static func getOrCreateDeviceCode() -> String {
+        let key = "healthwatch.deviceCode"
+        if let existing = UserDefaults.standard.string(forKey: key) {
+            return existing
+        }
+        // Generate a random 8-character hex code (e.g., "A3B79F2E")
+        let bytes = (0..<4).map { _ in UInt8.random(in: 0...255) }
+        let code = bytes.map { String(format: "%02X", $0) }.joined()
+        UserDefaults.standard.set(code, forKey: key)
+        return code
+    }
+
+    /// Formatted device code for display (e.g., "A3B7-9F2E")
+    static func formattedDeviceCode(_ code: String) -> String {
+        guard code.count == 8 else { return code }
+        let idx = code.index(code.startIndex, offsetBy: 4)
+        return "\(code[..<idx])-\(code[idx...])"
     }
 
     /// Start HealthKit collection and background scheduling after provisioning

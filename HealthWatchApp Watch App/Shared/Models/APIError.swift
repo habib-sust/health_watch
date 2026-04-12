@@ -41,6 +41,7 @@ enum WatchError: Error {
     case healthKitUnavailable
     case storageFull
     case configCorrupted
+    case keychainFailed
 }
 
 enum ProvisioningError: Error {

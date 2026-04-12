@@ -2,7 +2,9 @@
 
 ## Overview
 
-Provisioning is the process of securely linking an Apple Watch to a specific individual's health record. It uses a **4-digit code** exchanged between the iOS app and watchOS app over **WCSession** (Watch Connectivity). Once provisioned, the Watch begins collecting HealthKit data and pushing it to the backend under that individual's identity.
+Provisioning is the process of securely linking an Apple Watch to a specific individual's health record. The flow uses a **device code** (8-character hex) displayed on the Watch, which is either **scanned via QR code** or **entered manually** on the iOS app. The iOS app registers the device-to-individual mapping with the server, and the Watch **polls the server** until its configuration is available. Once provisioned, the Watch begins collecting HealthKit data and pushing it to the backend under that individual's identity.
+
+**Key design decision:** Provisioning does **not** depend on WCSession. Any iPhone with the app can provision any Watch — the devices do not need to be paired. WCSession is only used for the optional deprovision signal.
 
 ---
 
@@ -10,228 +12,165 @@ Provisioning is the process of securely linking an Apple Watch to a specific ind
 
 | Actor | Role |
 |---|---|
-| **Clinician / Caregiver** | Uses the iOS app to initiate provisioning and select which individual the Watch will monitor |
-| **Watch Wearer** | Enters the 4-digit code on the Watch to confirm pairing |
-| **iOS App** | Generates the code, verifies it, and sends configuration to the Watch |
-| **watchOS App** | Receives the code prompt, collects user input, stores config in Keychain |
-| **Backend Server** | (In production) validates the provisioning request and issues an auth token |
+| **Clinician / Caregiver** | Uses the iOS app to select an individual and enter/scan the device code |
+| **Watch Wearer** | Taps "Provision" on the Watch to display the device code |
+| **iOS App** | Scans the QR code or accepts manual code entry, registers the mapping with the server |
+| **watchOS App** | Generates device code, displays it, polls server for config, stores config in Keychain |
+| **Backend Server** | Stores the device-to-individual mapping and serves provisioning config |
 
 ---
 
 ## Step-by-Step Flow
 
-### 1. Initiation (iOS)
+### 1. Watch: Generate Device Code
 
-The clinician opens the **Provisioning** tab on the iOS app and selects an individual from the list.
+When unprovisioned, the Watch shows `WatchUnprovisionedView` with a "Provision" button. On tap:
 
 ```
-ProvisioningView → ProvisioningViewModel.startProvisioning(for: individual)
+WatchUnprovisionedView → WatchAppState.beginProvisioning()
 ```
 
-- The view model checks that the Watch is reachable via `WatchConnectivityManager.shared.isReachable`.
-- If unreachable, the flow pauses at a "Connecting to Watch..." screen.
+- `WatchAppState` generates an 8-character hex code via `getOrCreateDeviceCode()`
+- The code is persisted to `UserDefaults` so it survives app restarts
+- Mode transitions to `.showingCode(deviceCode:)`
 
-### 2. Code Generation (iOS)
+### 2. Watch: Display Code & Begin Polling
 
-Once the Watch is reachable, the iOS app generates a cryptographically secure 4-digit code.
+`WatchProvisionCodeView` displays the code formatted as `XXXX-XXXX` and starts `DeviceConfigPoller`:
 
-```swift
-// ProvisioningViewModel.swift
-private func generateCode() -> String {
-    var bytes = [UInt8](repeating: 0, count: 4)
-    _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
-    let digits = bytes.map { String($0 % 10) }
-    return digits.joined()
+- Polls `GET /api/v1/device/{deviceCode}/config` every 5 seconds
+- On `status == "provisioned"` → returns config
+- On 404 or `status == "pending"` → continues polling
+- Timeout after 5 minutes (`AppConstants.qrProvisioningTimeout`)
+- A "Cancel" button stops polling and returns to `.unprovisioned`
+
+### 3. iOS: Select Individual
+
+The clinician opens the **Provisioning** tab and selects an individual from the list.
+
+### 4. iOS: Scan QR Code or Enter Code Manually
+
+Two options are presented:
+
+**Option A — Scan QR Code (primary):**
+- `QRScannerView` opens the camera via `AVCaptureSession` + `AVCaptureMetadataOutput`
+- Scans for a QR code containing JSON: `{"app": "healthwatch", "version": 1, "deviceId": "..."}`
+- Validates the payload and extracts the `deviceId`
+
+**Option B — Enter Code Manually (fallback):**
+- Text field accepts the 8-character hex code (with or without dash)
+- Validates: exactly 8 hex characters after stripping dashes/spaces
+
+### 5. iOS: Register Device with Server
+
+```
+ProvisioningViewModel.registerDevice(deviceCode:)
+→ POST /api/v1/device/register { deviceId, individualId }
+→ Response: { success, deviceId, individualId }
+```
+
+On success (or demo fallback), the iOS app stores the mapping locally:
+- `provisionedIndividualId` → UserDefaults
+- `provisionedIndividualName` → UserDefaults
+- `provisionedDeviceCode` → UserDefaults
+
+The iOS provisioning flow is now complete (state → `.success`).
+
+### 6. Watch: Receive Config from Server
+
+The `DeviceConfigPoller` detects that the server now returns `status == "provisioned"`:
+
+```json
+{
+    "status": "provisioned",
+    "serverURL": "https://...",
+    "individualId": "ind-001",
+    "individualName": "Alice Johnson",
+    "authToken": "watch-token-..."
 }
 ```
 
-- The code is stored in `currentCode` along with `codeGeneratedAt = Date()`.
-- A **120-second countdown timer** begins on screen (`CodeDisplayView`).
-- The code turns red when fewer than 30 seconds remain.
+### 7. Watch: Store Config & Transition
 
-### 3. Initiate Message (iOS → Watch)
+`WatchAppState.completeProvisioning(with:)` is called:
 
-The iOS app sends a `.initiate` provisioning message to the Watch.
-
-```swift
-// ProvisioningViewModel.swift
-let message = ProvisioningMessage(
-    type: .initiate,
-    individualName: selectedIndividual.name
-)
-WatchConnectivityManager.shared.send(message)
-```
-
-This message travels over `WCSession.sendMessage(_:replyHandler:errorHandler:)`.
-
-### 4. Watch Receives Prompt (watchOS)
-
-The `WatchConnectivityHandler` receives the message and triggers a callback.
-
-```
-WatchConnectivityHandler.onProvisioningInitiated → WatchAppState.beginProvisioning(with:)
-```
-
-The Watch transitions from `.unprovisioned` to `.provisioning` mode and displays `WatchCodeEntryView`, which shows:
-- The individual's name ("Provisioning for Alice Johnson")
-- A secure text field for the 4-digit code
-- A "Confirm" button (enabled only when 4 digits are entered)
-
-### 5. Code Entry (watchOS)
-
-The Watch wearer types the 4-digit code shown on the iPhone into the Watch's text field and taps **Confirm**.
-
-```swift
-// WatchCodeEntryView.swift
-WatchConnectivityHandler.shared.sendCodeToiOS(code)
-```
-
-This sends a `.codeEntry` message back to the iOS app:
-
-```swift
-let message = ProvisioningMessage(type: .codeEntry, code: code)
-```
-
-### 6. Code Verification (iOS)
-
-The iOS app receives the code via `WatchConnectivityManager.onCodeReceived` and verifies it.
-
-```swift
-// ProvisioningViewModel.swift
-func verifyCode(_ receivedCode: String) -> Bool {
-    guard let code = currentCode,
-          let generated = codeGeneratedAt,
-          Date().timeIntervalSince(generated) < AppConstants.provisioningCodeExpiry
-    else { return false }
-    return receivedCode == code
-}
-```
-
-**Verification checks:**
-1. The code matches the generated code
-2. The code has not expired (120-second window)
-
-### 7a. Success Path — Send Configuration (iOS → Watch)
-
-If the code is correct, the iOS app sends a `.codeVerified` message containing the provisioning configuration:
-
-```swift
-let message = ProvisioningMessage(
-    type: .codeVerified,
-    serverURL: DemoConfiguration.serverURL,
-    individualId: individual.id,
-    authToken: DemoConfiguration.watchAuthToken,
-    individualName: individual.name
-)
-WatchConnectivityManager.shared.send(message)
-```
-
-### 7b. Failure Path — Code Rejected (iOS → Watch)
-
-If the code is wrong:
-- The attempt counter increments (`failedAttempts += 1`)
-- A `.codeFailed` message is sent to the Watch
-- The Watch displays an error and allows retry
-
-**After 3 failed attempts**, the flow enters a **5-minute lockout**:
-```swift
-if failedAttempts >= AppConstants.maxProvisioningAttempts {
-    state = .lockedOut
-    // Lockout lasts AppConstants.provisioningLockoutDuration (300 seconds)
-}
-```
-
-### 8. Watch Stores Configuration (watchOS)
-
-On receiving `.codeVerified`, the `WatchConnectivityHandler` stores the configuration securely in Keychain:
-
-```swift
-// WatchConnectivityHandler.swift
-let keychain = KeychainManager()
-try keychain.saveServerURL(serverURL)
-try keychain.saveIndividualId(individualId)
-try keychain.saveAuthToken(authToken)
-```
-
-The Keychain uses `kSecAttrAccessibleAfterFirstUnlock` so credentials survive Watch restarts.
-
-### 9. Acknowledgement (Watch → iOS)
-
-After successfully storing the config, the Watch sends an `.ack` message back to the iOS app:
-
-```swift
-WatchConnectivityHandler.shared.sendAck()
-// Sends: ProvisioningMessage(type: .ack)
-```
-
-### 10. Completion
-
-**On iOS:**
-- `WatchConnectivityManager.onAckReceived` fires
-- `ProvisioningViewModel` transitions to `.success` state
-- Success screen is displayed with a checkmark
-
-**On watchOS:**
-- `WatchAppState.completeProvisioning(individualName:)` is called
-- Individual name is persisted to `UserDefaults`
-- Mode transitions to `.provisioned`
-- `startDataCollection()` is called, which:
-  - Requests HealthKit authorization
-  - Restores anchored query positions
-  - Enables background delivery for all health types
-  - Schedules background refresh tasks (every 15 minutes)
+1. Stores `serverURL`, `individualId`, and `authToken` in Keychain (`kSecAttrAccessibleAfterFirstUnlock`)
+2. Stores `individualName` in UserDefaults
+3. Mode transitions to `.provisioned`
+4. `startDataCollection()` begins:
+   - Requests HealthKit authorization
+   - Restores anchored query positions
+   - Enables background delivery for all health types
+   - Schedules background refresh tasks (every 15 minutes)
 
 ---
 
 ## Sequence Diagram
 
 ```
-  iOS App                    WCSession                  watchOS App
-  ────────                   ─────────                  ───────────
+  iOS App                     Server                    watchOS App
+  ────────                    ──────                    ───────────
+     │                           │                           │
+     │                           │              User taps "Provision"
+     │                           │              Generate device code
+     │                           │              Display code: "A1B2-C3D4"
+     │                           │                           │
+     │                           │         GET /device/{id}/config (poll)
+     │                           │<──────────────────────────│
+     │                           │──── 404 (pending) ───────>│
+     │                           │           ... (every 5s) ...
      │                           │                           │
      │  User selects individual  │                           │
-     │  Generate 4-digit code    │                           │
-     │  Show code on screen      │                           │
+     │  Scans QR / enters code   │                           │
      │                           │                           │
-     │──── .initiate ───────────>│──── .initiate ───────────>│
-     │     (individualName)      │                           │
-     │                           │                    Show code entry UI
+     │  POST /device/register    │                           │
+     │  { deviceId, individualId }                           │
+     │──────────────────────────>│                           │
+     │<──── { success: true } ───│                           │
      │                           │                           │
-     │                           │                    User enters code
+     │  Show success             │         GET /device/{id}/config (poll)
+     │                           │<──────────────────────────│
+     │                           │── 200 { provisioned, config } ──>│
      │                           │                           │
-     │<──── .codeEntry ─────────│<──── .codeEntry ──────────│
-     │      (code: "1234")       │                           │
-     │                           │                           │
-     │  Verify code              │                           │
-     │  ┌─ Match? ─┐             │                           │
-     │  │          │             │                           │
-     │  ▼ YES      ▼ NO         │                           │
-     │              │             │                           │
-     │  │  ──── .codeFailed ────>│──── .codeFailed ─────────>│
-     │  │           │            │                    Show error, retry
-     │  │           │            │                           │
-     │  ▼           │            │                           │
-     │──── .codeVerified ───────>│──── .codeVerified ───────>│
-     │  (serverURL, authToken,   │                           │
-     │   individualId)           │                    Store in Keychain
-     │                           │                           │
-     │<──── .ack ───────────────│<──── .ack ────────────────│
-     │                           │                           │
-     │  Show success             │                    Start HealthKit
-     │                           │                    collection
+     │                           │              Store config in Keychain
+     │                           │              Start HealthKit collection
 ```
 
 ---
 
-## Message Types
+## Message Types (WCSession — deprovision only)
 
-| Type | Direction | Payload | Purpose |
-|---|---|---|---|
-| `.initiate` | iOS → Watch | `individualName` | Tell Watch to show code entry UI |
-| `.codeEntry` | Watch → iOS | `code` | Send the user-entered 4-digit code |
-| `.codeVerified` | iOS → Watch | `serverURL`, `individualId`, `authToken`, `individualName` | Deliver provisioning configuration |
-| `.codeFailed` | iOS → Watch | — | Notify Watch that code was incorrect |
-| `.ack` | Watch → iOS | — | Confirm config was stored in Keychain |
+| Type | Direction | Purpose |
+|---|---|---|
+| `.deprovision` | iOS → Watch | Tell Watch to clear config and return to unprovisioned |
+| `.ack` | Watch → iOS | Acknowledge deprovision was processed |
+
+---
+
+## Deprovisioning
+
+To remove provisioning from the iOS app:
+
+1. `ProvisioningViewModel.removeProvisioning()`:
+   - Calls `DELETE /api/v1/device/{deviceCode}` to remove server mapping
+   - Sends `.deprovision` message via WCSession (if Watch is reachable)
+   - Clears local UserDefaults (individualId, name, deviceCode)
+
+2. Watch receives `.deprovision` via `WatchConnectivityHandler`:
+   - Calls `WatchAppState.resetToUnprovisioned()`
+   - Stops all HealthKit observer queries
+   - Clears CoreData buffer, deduplication cache, Keychain, UserDefaults
+   - Transitions mode to `.unprovisioned`
+
+---
+
+## API Endpoints
+
+| Endpoint | Method | Auth | Caller | Purpose |
+|---|---|---|---|---|
+| `POST /api/v1/device/register` | POST | Bearer (staff token) | iOS | Map device ID to individual |
+| `GET /api/v1/device/{deviceId}/config` | GET | None | Watch | Poll for provisioning config |
+| `DELETE /api/v1/device/{deviceId}` | DELETE | Bearer (staff token) | iOS | Remove device mapping |
 
 ---
 
@@ -239,12 +178,13 @@ WatchConnectivityHandler.shared.sendAck()
 
 | Measure | Detail |
 |---|---|
-| **Code generation** | Uses `SecRandomCopyBytes` (cryptographically secure random) |
-| **Code expiry** | 120 seconds from generation |
-| **Brute-force protection** | Max 3 attempts, then 5-minute lockout |
+| **Device code** | 8-character hex (32 bits of entropy) generated via random bytes |
+| **Code persistence** | Stored in UserDefaults on Watch; not transmitted over WCSession |
+| **Polling timeout** | 5 minutes — prevents indefinite server load |
 | **Secure storage** | Keychain with `kSecAttrAccessibleAfterFirstUnlock` |
-| **Transport** | WCSession (encrypted Bluetooth/WiFi between paired devices) |
-| **Token isolation** | Watch receives a dedicated `watchAuthToken`, separate from the iOS API token |
+| **Transport** | HTTPS for all server communication |
+| **Token isolation** | Watch receives a dedicated auth token, separate from the iOS staff token |
+| **Server-side mapping** | Device-to-individual association lives on the server, not on the devices |
 
 ---
 
@@ -252,10 +192,8 @@ WatchConnectivityHandler.shared.sendAck()
 
 | Constant | Value | Source |
 |---|---|---|
-| `provisioningCodeLength` | 4 digits | `AppConstants.swift` |
-| `provisioningCodeExpiry` | 120 seconds | `AppConstants.swift` |
-| `maxProvisioningAttempts` | 3 | `AppConstants.swift` |
-| `provisioningLockoutDuration` | 300 seconds (5 min) | `AppConstants.swift` |
+| `qrPollingInterval` | 5 seconds | `AppConstants.swift` |
+| `qrProvisioningTimeout` | 300 seconds (5 min) | `AppConstants.swift` |
 
 ---
 
@@ -265,57 +203,44 @@ WatchConnectivityHandler.shared.sendAck()
 
 | File | Role |
 |---|---|
-| `Features/Provisioning/ProvisioningView.swift` | Main provisioning UI with state-driven screens |
-| `Features/Provisioning/ProvisioningViewModel.swift` | Code generation, verification, attempt tracking, state management |
-| `Features/Provisioning/CodeDisplayView.swift` | 4-digit code display with countdown timer |
+| `Features/Provisioning/ProvisioningView.swift` | Main provisioning UI — individual selection, scanner, code entry |
+| `Features/Provisioning/ProvisioningViewModel.swift` | State machine, device registration, deprovisioning |
+| `Features/Provisioning/QRScannerView.swift` | AVFoundation camera QR scanner |
 | `Features/Provisioning/ProvisioningStatusView.swift` | Reusable status/progress component |
-| `Services/WatchConnectivityManager.swift` | WCSession delegate, sends/receives `ProvisioningMessage` |
+| `Services/WatchConnectivityManager.swift` | WCSession delegate (deprovision messages only) |
+| `Shared/Networking/Endpoint.swift` | API endpoint definitions including QR provisioning |
 
 ### watchOS
 
 | File | Role |
 |---|---|
-| `Features/Provisioning/AwaitingSetupView.swift` | Shown when unprovisioned — "Open iPhone app" |
-| `Features/Provisioning/WatchCodeEntryView.swift` | 4-digit code entry UI with secure text field |
+| `Features/Provisioning/WatchUnprovisionedView.swift` | "Provision" button when unprovisioned |
+| `Features/Provisioning/WatchQRProvisionView.swift` | Device code display + polling indicator |
 | `Features/Provisioning/WatchErrorView.swift` | Error display with recovery guidance |
-| `Services/WatchConnectivityHandler.swift` | WCSession delegate, receives config, stores in Keychain |
+| `Services/DeviceConfigPoller.swift` | Server polling service for provisioning config |
+| `Services/WatchConnectivityHandler.swift` | WCSession delegate (deprovision handling only) |
 | `Services/WatchAppState.swift` | State machine driving UI transitions |
 
 ### Shared
 
 | File | Role |
 |---|---|
-| `Shared/Models/ProvisioningMessage.swift` | Message model with type enum and optional fields |
+| `Shared/Models/ProvisioningMessage.swift` | Message model — `.ack` and `.deprovision` types |
 | `Shared/Security/KeychainManager.swift` | Keychain read/write for provisioning config |
-| `Shared/Constants/AppConstants.swift` | Code length, expiry, attempt limits |
-
----
-
-## Re-Provisioning
-
-To re-provision a Watch for a different individual:
-
-1. `WatchAppState.resetToUnprovisioned()` is called, which:
-   - Stops all HealthKit observer queries
-   - Clears the deduplication cache
-   - Clears all buffered health data from CoreData
-   - Wipes the Keychain (serverURL, individualId, authToken)
-   - Removes the stored individual name from UserDefaults
-   - Resets sync status to `.idle`
-   - Transitions mode back to `.unprovisioned`
-
-2. The Watch returns to `AwaitingSetupView`, ready for a new provisioning cycle.
+| `Shared/Constants/AppConstants.swift` | Polling interval, timeout values |
 
 ---
 
 ## Error Recovery
 
-| Error | Watch Behavior |
+| Error | Behavior |
 |---|---|
-| Code expired | iOS shows "Code expired", generates a new code |
-| Wrong code (< 3 attempts) | Watch shows error, user can retry |
-| Wrong code (3 attempts) | 5-minute lockout on iOS, Watch waits |
-| Watch unreachable | iOS pauses at "Connecting to Watch..." |
-| Config save fails | Watch transitions to `.error(.configCorrupted)` |
-| Token revoked (HTTP 401 during operation) | Watch calls `recoverFromTokenRevoked()` → full re-provisioning |
+| Server unreachable during polling | Watch retries every 5 seconds until timeout |
+| Polling timeout (5 min) | Watch shows timeout error, user can retry |
+| Cancel during polling | Watch returns to unprovisioned state |
+| Invalid QR code | iOS shows error, user can retry scan or enter manually |
+| Invalid manual code | iOS shows validation error |
+| Registration fails (server) | Demo fallback simulates success |
+| Keychain save fails | Watch transitions to `.error(.keychainFailed)` |
+| Token revoked (HTTP 401) | Watch calls `recoverFromTokenRevoked()` → full re-provisioning |
 | HealthKit denied | Watch shows `.error(.healthKitUnavailable)` |

@@ -73,4 +73,38 @@ struct Endpoint: Sendable {
             ]
         )
     }
+
+    // MARK: - QR Provisioning Endpoints
+
+    /// Register a device-to-individual mapping (iOS → Server)
+    static func registerDevice(deviceId: String, individualId: String) -> Endpoint {
+        Endpoint(
+            path: "/api/v1/device/register",
+            method: .POST,
+            body: DeviceRegistration(deviceId: deviceId, individualId: individualId)
+        )
+    }
+
+    /// Poll for device provisioning config (Watch → Server)
+    static func getDeviceConfig(deviceId: String) -> Endpoint {
+        Endpoint(path: "/api/v1/device/\(deviceId)/config", method: .GET)
+    }
+
+    /// Remove device registration (iOS → Server)
+    static func removeDevice(deviceId: String) -> Endpoint {
+        Endpoint(path: "/api/v1/device/\(deviceId)", method: .DELETE)
+    }
+}
+
+// MARK: - QR Provisioning Models
+
+struct DeviceRegistration: Codable, Sendable {
+    let deviceId: String
+    let individualId: String
+}
+
+struct DeviceRegistrationResponse: Codable, Sendable {
+    let success: Bool
+    let deviceId: String
+    let individualId: String
 }

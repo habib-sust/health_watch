@@ -39,4 +39,15 @@ enum AppConstants {
 
     /// API timeout for resource downloads
     static let apiResourceTimeout: TimeInterval = 60
+
+    // MARK: - QR Provisioning
+
+    /// Polling interval for watch config check (seconds)
+    static let qrPollingInterval: TimeInterval = 5
+
+    /// Max time to poll before timeout (5 minutes)
+    static let qrProvisioningTimeout: TimeInterval = 300
+
+    /// Server URL for provisioning polling (demo)
+    static let provisioningServerURL = "https://dev-api.healthwatch.example"
 }
