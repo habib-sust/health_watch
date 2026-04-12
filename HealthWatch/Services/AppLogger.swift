@@ -7,4 +7,5 @@ extension Logger {
     static let networking = Logger(subsystem: subsystem, category: "networking")
     static let dashboard = Logger(subsystem: subsystem, category: "dashboard")
     static let alerts = Logger(subsystem: subsystem, category: "alerts")
+    static let qrScanner = Logger(subsystem: subsystem, category: "qrScanner")
 }

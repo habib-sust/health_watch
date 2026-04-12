@@ -18,6 +18,15 @@ struct ProvisioningView: View {
                 case .scanningQR:
                     scannerView
 
+                case .scannedQR:
+                    ProvisioningStatusView(
+                        icon: "checkmark.circle.fill",
+                        title: "QR Code Scanned",
+                        subtitle: "Provisioning \(viewModel.selectedIndividual?.name ?? "watch")...",
+                        isLoading: true,
+                        iconColor: .green
+                    )
+
                 case .enteringCode:
                     codeEntryView
 

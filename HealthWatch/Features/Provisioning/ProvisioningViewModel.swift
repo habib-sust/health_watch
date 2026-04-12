@@ -4,6 +4,7 @@ import Combine
 enum ProvisioningState: Equatable {
     case selectIndividual
     case scanningQR
+    case scannedQR
     case enteringCode
     case registeringDevice
     case success
@@ -44,7 +45,7 @@ final class ProvisioningViewModel: ObservableObject {
         state = .scanningQR
     }
 
-    /// Parse a scanned QR payload and register the device
+    /// Parse a scanned QR payload, show confirmation, then register the device
     func handleScannedQR(payload: String) async {
         guard let data = payload.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -53,6 +54,9 @@ final class ProvisioningViewModel: ObservableObject {
             return
         }
 
+        state = .scannedQR
+        // Brief pause so the user sees the scan succeeded
+        try? await Task.sleep(for: .seconds(1.5))
         await registerDevice(deviceCode: deviceCode)
     }
 

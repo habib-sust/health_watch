@@ -11,26 +11,66 @@ struct DeviceConfigResponse: Codable {
     var isProvisioned: Bool { status == "provisioned" }
 }
 
-/// Polls the server for device provisioning configuration
+/// Polls the server for device provisioning configuration.
+/// When `useMockResponse` is true, returns a mock config after a short delay instead of calling the server.
 final class DeviceConfigPoller {
     private var isPolling = false
+
+    /// Set to `false` once a real server is available
+    var useMockResponse = true
 
     /// Start polling for device config. Returns when config is available, or nil on timeout/cancellation.
     func startPolling(deviceId: String) async -> DeviceConfigResponse? {
         isPolling = true
+
+        if useMockResponse {
+            return await pollMock(deviceId: deviceId)
+        }
+
+        return await pollServer(deviceId: deviceId)
+    }
+
+    func stopPolling() {
+        isPolling = false
+    }
+
+    // MARK: - Mock Polling
+
+    /// Simulates a server response after a brief delay
+    private func pollMock(deviceId: String) async -> DeviceConfigResponse? {
+        // Simulate network delay so the user sees the QR code briefly
+        do {
+            try await Task.sleep(nanoseconds: 3_000_000_000)
+        } catch {
+            return nil
+        }
+
+        guard isPolling else { return nil }
+
+        print("[DeviceConfigPoller] Returning mock provisioning config for device: \(deviceId)")
+        return DeviceConfigResponse(
+            status: "provisioned",
+            serverURL: AppConstants.provisioningServerURL,
+            individualId: "mock-individual-001",
+            individualName: "Demo User",
+            authToken: "mock-auth-token-\(deviceId)"
+        )
+    }
+
+    // MARK: - Server Polling
+
+    private func pollServer(deviceId: String) async -> DeviceConfigResponse? {
         let startTime = Date()
         let timeout = AppConstants.qrProvisioningTimeout
         let interval = AppConstants.qrPollingInterval
         let serverURL = AppConstants.provisioningServerURL
 
         while isPolling {
-            // Check timeout
             if Date().timeIntervalSince(startTime) >= timeout {
                 print("[DeviceConfigPoller] Polling timed out after \(Int(timeout))s")
                 return nil
             }
 
-            // Poll the server
             if let config = await fetchConfig(deviceId: deviceId, serverURL: serverURL) {
                 if config.isProvisioned {
                     print("[DeviceConfigPoller] Device provisioned!")
@@ -38,20 +78,14 @@ final class DeviceConfigPoller {
                 }
             }
 
-            // Wait before next poll
             do {
                 try await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
             } catch {
-                // Task was cancelled
                 return nil
             }
         }
 
         return nil
-    }
-
-    func stopPolling() {
-        isPolling = false
     }
 
     private func fetchConfig(deviceId: String, serverURL: String) async -> DeviceConfigResponse? {
@@ -70,7 +104,6 @@ final class DeviceConfigPoller {
             if httpResponse.statusCode == 200 {
                 return try JSONDecoder.healthWatch.decode(DeviceConfigResponse.self, from: data)
             } else if httpResponse.statusCode == 404 {
-                // Device not yet registered — continue polling
                 return nil
             } else {
                 print("[DeviceConfigPoller] Unexpected status: \(httpResponse.statusCode)")

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct WatchStatusView: View {
     @EnvironmentObject var appState: WatchAppState
+    @State private var showingUnprovisionConfirmation = false
 
     var body: some View {
         VStack(spacing: 12) {
@@ -21,6 +22,25 @@ struct WatchStatusView: View {
                 Text("Last sync: \(lastSync, style: .relative) ago")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+            }
+
+            Button(role: .destructive) {
+                showingUnprovisionConfirmation = true
+            } label: {
+                Label("Unprovision", systemImage: "xmark.circle")
+            }
+            .font(.caption)
+            .padding(.top, 8)
+            .confirmationDialog(
+                "Remove Provisioning?",
+                isPresented: $showingUnprovisionConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Unprovision", role: .destructive) {
+                    appState.resetToUnprovisioned()
+                }
+            } message: {
+                Text("This will stop monitoring and clear all data.")
             }
         }
         .padding()
