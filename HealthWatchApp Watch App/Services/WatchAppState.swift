@@ -1,6 +1,7 @@
 import SwiftUI
 import Combine
 import WatchKit
+import os
 
 enum WatchMode {
     case unprovisioned
@@ -31,29 +32,35 @@ final class WatchAppState: ObservableObject {
         if let _ = try? keychain.loadProvisioningConfig() {
             mode = .provisioned
             individualName = UserDefaults.standard.string(forKey: "provisionedIndividualName")
+            Logger.provisioning.info("Initialized — already provisioned for \(self.individualName ?? "unknown")")
             startDataCollection()
         } else {
             mode = .unprovisioned
+            Logger.provisioning.info("Initialized — unprovisioned")
         }
     }
 
     /// Generate a pairing code and transition to code display mode
     func beginProvisioning() {
         let code = Self.getOrCreateDeviceCode()
+        Logger.provisioning.info("Begin provisioning — deviceCode: \(code)")
         mode = .showingCode(deviceCode: code)
     }
 
     /// Cancel provisioning and return to unprovisioned
     func cancelProvisioning() {
+        Logger.provisioning.info("Provisioning cancelled by user")
         mode = .unprovisioned
     }
 
     /// Complete provisioning with config received from server polling
     func completeProvisioning(with config: DeviceConfigResponse) {
+        Logger.provisioning.info("Completing provisioning — status: \(config.status), individualId: \(config.individualId ?? "nil"), individualName: \(config.individualName ?? "nil")")
+
         guard let serverURL = config.serverURL,
               let individualId = config.individualId,
               let authToken = config.authToken else {
-            print("[WatchAppState] Incomplete provisioning config")
+            Logger.provisioning.error("Incomplete provisioning config — serverURL: \(config.serverURL ?? "nil"), individualId: \(config.individualId ?? "nil"), authToken: \(config.authToken != nil ? "present" : "nil")")
             return
         }
 
@@ -61,8 +68,9 @@ final class WatchAppState: ObservableObject {
             try keychain.saveServerURL(serverURL)
             try keychain.saveIndividualId(individualId)
             try keychain.saveAuthToken(authToken)
+            Logger.provisioning.info("Keychain saved — serverURL: \(serverURL), individualId: \(individualId)")
         } catch {
-            print("[WatchAppState] Keychain save failed: \(error.localizedDescription)")
+            Logger.provisioning.error("Keychain save failed: \(error.localizedDescription)")
             handleError(.keychainFailed)
             return
         }
@@ -72,6 +80,7 @@ final class WatchAppState: ObservableObject {
             UserDefaults.standard.set(name, forKey: "provisionedIndividualName")
         }
         mode = .provisioned
+        Logger.provisioning.info("Provisioning complete — starting data collection")
         startDataCollection()
     }
 
@@ -81,12 +90,13 @@ final class WatchAppState: ObservableObject {
     static func getOrCreateDeviceCode() -> String {
         let key = "healthwatch.deviceCode"
         if let existing = UserDefaults.standard.string(forKey: key) {
+            Logger.provisioning.debug("Using existing device code: \(existing)")
             return existing
         }
-        // Generate a random 8-character hex code (e.g., "A3B79F2E")
         let bytes = (0..<4).map { _ in UInt8.random(in: 0...255) }
         let code = bytes.map { String(format: "%02X", $0) }.joined()
         UserDefaults.standard.set(code, forKey: key)
+        Logger.provisioning.info("Generated new device code: \(code)")
         return code
     }
 
@@ -99,27 +109,32 @@ final class WatchAppState: ObservableObject {
 
     /// Start HealthKit collection and background scheduling after provisioning
     func startDataCollection() {
+        Logger.provisioning.info("Starting data collection pipeline")
         Task {
             do {
                 try await HealthKitCollector.shared.requestAuthorization()
+                Logger.provisioning.info("HealthKit authorization granted")
+
                 HealthKitCollector.shared.restoreAnchors()
                 HealthKitCollector.shared.enableBackgroundDelivery()
+                Logger.provisioning.info("HealthKit observer queries and background delivery enabled")
 
-                // Set up callback for observer-triggered samples
                 HealthKitCollector.shared.onNewSamplesReceived = { samples in
                     let batchId = UUID()
+                    Logger.provisioning.debug("Received \(samples.count) new samples — batchId: \(batchId)")
                     LocalBufferManager.shared.buffer(samples, batchId: batchId)
                 }
 
                 BackgroundTaskScheduler.shared.scheduleNextRefresh()
-                print("[WatchAppState] Data collection started")
+                Logger.provisioning.info("Data collection started successfully")
             } catch {
-                print("[WatchAppState] HealthKit authorization failed: \(error)")
+                Logger.provisioning.error("HealthKit authorization failed: \(error.localizedDescription)")
             }
         }
     }
 
     func handleError(_ error: WatchError) {
+        Logger.provisioning.error("Watch error: \(String(describing: error))")
         mode = .error(error)
     }
 
@@ -127,6 +142,7 @@ final class WatchAppState: ObservableObject {
 
     /// Re-provisioning: clear all data and return to unprovisioned state
     func resetToUnprovisioned() {
+        Logger.provisioning.info("Resetting to unprovisioned state — clearing all data")
         HealthKitCollector.shared.stopObserverQueries()
         HealthKitCollector.shared.clearDeduplicationCache()
         LocalBufferManager.shared.clearAllBufferedData()
@@ -136,6 +152,7 @@ final class WatchAppState: ObservableObject {
         lastSyncDate = nil
         syncStatus = .idle
         mode = .unprovisioned
+        Logger.provisioning.info("Reset complete — watch is unprovisioned")
     }
 
     /// Handle storage-full: purge oldest buffered data and resume

@@ -1,5 +1,6 @@
 import Foundation
 import HealthKit
+import os
 
 final class HealthKitCollector {
     static let shared = HealthKitCollector()
@@ -37,10 +38,12 @@ final class HealthKitCollector {
 
     func requestAuthorization() async throws {
         guard isAvailable else {
-            print("[HealthKitCollector] HealthKit not available on this device")
+            Logger.healthKit.error("HealthKit not available on this device")
             return
         }
+        Logger.healthKit.info("Requesting HealthKit authorization for \(Self.readTypes.count) types")
         try await store.requestAuthorization(toShare: [], read: Self.readTypes)
+        Logger.healthKit.info("HealthKit authorization completed")
     }
 
     func authorizationStatus(for type: HKObjectType) -> HKAuthorizationStatus {
@@ -54,26 +57,40 @@ final class HealthKitCollector {
     // MARK: - Background Delivery & Observer Queries
 
     func enableBackgroundDelivery() {
-        guard isAvailable else { return }
+        guard isAvailable else {
+            Logger.healthKit.warning("Cannot enable background delivery — HealthKit unavailable")
+            return
+        }
+        Logger.healthKit.info("Enabling background delivery for \(Self.readTypes.count) types")
         for type in Self.readTypes {
-            guard authorizationStatus(for: type) != .sharingDenied else { continue }
+            guard authorizationStatus(for: type) != .sharingDenied else {
+                Logger.healthKit.debug("Skipping \(type.identifier) — authorization denied")
+                continue
+            }
 
             store.enableBackgroundDelivery(for: type, frequency: .immediate) { success, error in
                 if let error {
-                    print("[HealthKitCollector] BG delivery error for \(type): \(error)")
+                    Logger.healthKit.error("Background delivery error for \(type.identifier): \(error.localizedDescription)")
+                } else {
+                    Logger.healthKit.debug("Background delivery enabled for \(type.identifier)")
                 }
             }
 
             let query = HKObserverQuery(sampleType: type as! HKSampleType, predicate: nil) {
                 [weak self] _, completionHandler, error in
                 guard error == nil else {
+                    Logger.healthKit.error("Observer query error for \(type.identifier): \(error!.localizedDescription)")
                     completionHandler()
                     return
                 }
                 Task {
+                    Logger.healthKit.info("Observer triggered for \(type.identifier)")
                     let samples = await self?.fetchNewSamples(for: type as! HKSampleType) ?? []
                     if !samples.isEmpty {
+                        Logger.healthKit.info("Observer delivered \(samples.count) new samples for \(type.identifier)")
                         self?.onNewSamplesReceived?(samples)
+                    } else {
+                        Logger.healthKit.debug("Observer triggered for \(type.identifier) but no new samples")
                     }
                     completionHandler()
                 }
@@ -81,9 +98,11 @@ final class HealthKitCollector {
             store.execute(query)
             observerQueries.append(query)
         }
+        Logger.healthKit.info("Background delivery and observer queries set up")
     }
 
     func stopObserverQueries() {
+        Logger.healthKit.info("Stopping \(self.observerQueries.count) observer queries")
         for query in observerQueries {
             store.stop(query)
         }
@@ -94,6 +113,7 @@ final class HealthKitCollector {
 
     func fetchNewSamples(for sampleType: HKSampleType) async -> [HealthSample] {
         let anchor = anchors[sampleType]
+        Logger.healthKit.debug("Fetching new samples for \(sampleType.identifier), anchor: \(anchor != nil ? "present" : "nil")")
 
         return await withCheckedContinuation { continuation in
             let query = HKAnchoredObjectQuery(
@@ -103,9 +123,12 @@ final class HealthKitCollector {
                 limit: HKObjectQueryNoLimit
             ) { [weak self] _, newSamples, _, newAnchor, error in
                 guard let newSamples, error == nil else {
+                    Logger.healthKit.error("Anchored query failed for \(sampleType.identifier): \(error?.localizedDescription ?? "unknown")")
                     continuation.resume(returning: [])
                     return
                 }
+
+                Logger.healthKit.debug("Anchored query returned \(newSamples.count) raw samples for \(sampleType.identifier)")
 
                 if let newAnchor {
                     self?.anchors[sampleType] = newAnchor
@@ -116,8 +139,13 @@ final class HealthKitCollector {
                     self?.convertToHealthSample(sample)
                 }
 
-                // De-duplicate before returning
                 let deduplicated = self?.deduplicateSamples(healthSamples) ?? healthSamples
+                Logger.healthKit.info("Fetched \(deduplicated.count) unique samples for \(sampleType.identifier) (raw: \(newSamples.count), converted: \(healthSamples.count))")
+
+                for sample in deduplicated {
+                    Logger.healthKit.debug("  \(sample.typeIdentifier): \(sample.value) \(sample.unit) @ \(sample.startDate)")
+                }
+
                 continuation.resume(returning: deduplicated)
             }
             store.execute(query)
@@ -126,7 +154,11 @@ final class HealthKitCollector {
 
     /// Fetch new samples across all authorized types
     func fetchAllNewSamples() async -> [HealthSample] {
-        guard isAvailable else { return [] }
+        guard isAvailable else {
+            Logger.healthKit.warning("fetchAllNewSamples — HealthKit unavailable")
+            return []
+        }
+        Logger.healthKit.info("Fetching new samples across all types")
         var allSamples: [HealthSample] = []
         for type in Self.readTypes {
             guard authorizationStatus(for: type) != .sharingDenied,
@@ -134,6 +166,7 @@ final class HealthKitCollector {
             let samples = await fetchNewSamples(for: sampleType)
             allSamples.append(contentsOf: samples)
         }
+        Logger.healthKit.info("Total new samples across all types: \(allSamples.count)")
         return allSamples
     }
 

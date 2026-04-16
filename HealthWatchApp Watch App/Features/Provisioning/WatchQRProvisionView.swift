@@ -1,5 +1,6 @@
 import SwiftUI
 import QRCode
+import os
 
 /// Displays a QR code containing the device ID.
 /// After the user scans the QR on the iPhone and taps "Done" here,
@@ -150,6 +151,7 @@ struct WatchProvisionCodeView: View {
     // MARK: - Server Polling
 
     private func startPolling() {
+        Logger.provisioning.info("User tapped Done — starting polling for device: \(deviceCode)")
         isPolling = true
         pollingFailed = false
         pollingStatus = "Verifying with server..."
@@ -157,14 +159,19 @@ struct WatchProvisionCodeView: View {
         pollTask = Task {
             let config = await poller.startPolling(deviceId: deviceCode)
 
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled else {
+                Logger.provisioning.info("Poll task cancelled")
+                return
+            }
 
             await MainActor.run {
                 if let config {
+                    Logger.provisioning.info("Polling succeeded — pairing complete for device: \(deviceCode)")
                     receivedConfig = config
                     pairingComplete = true
                     isPolling = false
                 } else {
+                    Logger.provisioning.warning("Polling returned nil — server unreachable or timed out")
                     pollingStatus = "Could not reach server. Try again."
                     pollingFailed = true
                 }
@@ -173,6 +180,7 @@ struct WatchProvisionCodeView: View {
     }
 
     private func cancelProvisioning() {
+        Logger.provisioning.info("User cancelled provisioning from QR view")
         poller.stopPolling()
         pollTask?.cancel()
         pollTask = nil

@@ -1,6 +1,7 @@
 import Foundation
 import HealthKit
 import Combine
+import os
 
 /// A single displayable health metric with its latest value and metadata.
 struct WatchHealthMetric: Identifiable {
@@ -50,9 +51,29 @@ final class WatchHealthDataViewModel: ObservableObject {
     }
 
     func loadLatestValues() async {
+        let dateFormatter = ISO8601DateFormatter()
+        dateFormatter.formatOptions = [.withFullDate, .withFullTime, .withFractionalSeconds]
+
+        Logger.healthKit.info("━━━ Loading latest health values ━━━")
+        Logger.healthKit.info("Metrics to fetch: \(Self.displayedMetrics.map(\.name).joined(separator: ", "))")
         isLoading = lastRefreshDate == nil
+
         for (index, config) in Self.displayedMetrics.enumerated() {
-            guard let quantityType = HKQuantityType.quantityType(forIdentifier: config.identifier) else { continue }
+            guard let quantityType = HKQuantityType.quantityType(forIdentifier: config.identifier) else {
+                Logger.healthKit.warning("Could not create quantity type for \(config.identifier.rawValue)")
+                continue
+            }
+
+            let authStatus = store.authorizationStatus(for: quantityType)
+            let authString: String
+            switch authStatus {
+            case .notDetermined: authString = "notDetermined"
+            case .sharingDenied: authString = "denied"
+            case .sharingAuthorized: authString = "authorized"
+            @unknown default: authString = "unknown"
+            }
+
+            Logger.healthKit.info("[\(config.name)] type: \(config.identifier.rawValue), HKUnit: \(config.unit.unitString), displayUnit: \(config.displayUnit), auth: \(authString)")
 
             if let sample = await fetchMostRecentSample(for: quantityType) {
                 var value = sample.quantity.doubleValue(for: config.unit)
@@ -61,6 +82,15 @@ final class WatchHealthDataViewModel: ObservableObject {
                 }
                 metrics[index].latestValue = value
                 metrics[index].lastUpdated = sample.startDate
+
+                Logger.healthKit.info("[\(config.name)] latest: \(String(format: "%.2f", value)) \(config.displayUnit)")
+                Logger.healthKit.info("[\(config.name)] startDate: \(dateFormatter.string(from: sample.startDate))")
+                Logger.healthKit.info("[\(config.name)] endDate: \(dateFormatter.string(from: sample.endDate))")
+                Logger.healthKit.info("[\(config.name)] source: \(sample.sourceRevision.source.name) (\(sample.sourceRevision.source.bundleIdentifier))")
+                Logger.healthKit.info("[\(config.name)] device: \(sample.device?.name ?? "unknown") (\(sample.device?.model ?? "unknown"))")
+                Logger.healthKit.info("[\(config.name)] uuid: \(sample.uuid.uuidString)")
+            } else {
+                Logger.healthKit.info("[\(config.name)] latest: nil — no sample available")
             }
 
             let recentSamples = await fetchRecentSamples(for: quantityType, limit: 6)
@@ -71,17 +101,38 @@ final class WatchHealthDataViewModel: ObservableObject {
                 }
                 return value
             }
+
+            if !recentSamples.isEmpty {
+                let valuesStr = recentSamples.enumerated().map { i, sample in
+                    var v = sample.quantity.doubleValue(for: config.unit)
+                    if config.identifier == .oxygenSaturation { v *= 100.0 }
+                    return "  [\(i)] \(String(format: "%.2f", v)) \(config.displayUnit) @ \(dateFormatter.string(from: sample.startDate)) src=\(sample.sourceRevision.source.name)"
+                }.joined(separator: "\n")
+                Logger.healthKit.info("[\(config.name)] recent (\(recentSamples.count) samples):\n\(valuesStr)")
+            } else {
+                Logger.healthKit.info("[\(config.name)] recent: no samples")
+            }
         }
 
-        // Replace steps latest value with today's cumulative total
         if let stepIndex = Self.displayedMetrics.firstIndex(where: { $0.identifier == .stepCount }),
            let todaySteps = await fetchTodayCumulativeSteps() {
             metrics[stepIndex].latestValue = todaySteps
             metrics[stepIndex].lastUpdated = Date()
+            Logger.healthKit.info("[Steps] today cumulative: \(Int(todaySteps)) steps")
+        } else {
+            Logger.healthKit.info("[Steps] today cumulative: unavailable")
         }
 
         isLoading = false
         lastRefreshDate = Date()
+
+        Logger.healthKit.info("━━━ Refresh summary ━━━")
+        for metric in metrics {
+            let valueStr = metric.latestValue.map { String(format: "%.2f", $0) } ?? "nil"
+            let dateStr = metric.lastUpdated.map { dateFormatter.string(from: $0) } ?? "never"
+            Logger.healthKit.info("  \(metric.displayName): \(valueStr) \(metric.unit) (updated: \(dateStr), history: \(metric.recentValues.count) pts)")
+        }
+        Logger.healthKit.info("━━━ Refresh complete ━━━")
     }
 
     // MARK: - HealthKit Queries
@@ -140,16 +191,19 @@ final class WatchHealthDataViewModel: ObservableObject {
 
     func startAutoRefresh() {
         stopAutoRefresh()
+        Logger.healthKit.info("Auto-refresh started (60s interval)")
         refreshTask = Task {
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 60_000_000_000)
                 guard !Task.isCancelled else { break }
+                Logger.healthKit.debug("Auto-refresh triggered")
                 await loadLatestValues()
             }
         }
     }
 
     func stopAutoRefresh() {
+        Logger.healthKit.info("Auto-refresh stopped")
         refreshTask?.cancel()
         refreshTask = nil
     }
