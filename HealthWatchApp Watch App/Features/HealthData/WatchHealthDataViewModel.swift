@@ -3,185 +3,213 @@ import HealthKit
 import Combine
 import os
 
-/// A single displayable health metric with its latest value and metadata.
-struct WatchHealthMetric: Identifiable {
-    let id: String
-    let displayName: String
-    let icon: String
-    let color: String
-    var latestValue: Double?
-    var unit: String
-    var lastUpdated: Date?
-    var recentValues: [Double]
+// MARK: - Data Models
+
+/// A single data point for charting (timestamp + value)
+struct HealthDataPoint: Identifiable {
+    let id = UUID()
+    let date: Date
+    let value: Double
 }
+
+/// Hourly step bucket for the bar chart
+struct HourlySteps: Identifiable {
+    let id = UUID()
+    let hour: Int
+    let date: Date
+    let steps: Double
+}
+
+/// Heart rate statistics for a time period
+struct HeartRateStats {
+    var current: Double?
+    var min: Double?
+    var max: Double?
+    var avg: Double?
+    var lastUpdated: Date?
+}
+
+/// Steps statistics for today
+struct StepsStats {
+    var totalToday: Double = 0
+    var goal: Double = 10_000
+    var lastUpdated: Date?
+
+    var progress: Double {
+        guard goal > 0 else { return 0 }
+        return min(totalToday / goal, 1.0)
+    }
+
+    var formattedTotal: String {
+        if totalToday >= 10_000 {
+            return String(format: "%.1fk", totalToday / 1000.0)
+        }
+        return String(Int(totalToday))
+    }
+}
+
+// MARK: - ViewModel
 
 @MainActor
 final class WatchHealthDataViewModel: ObservableObject {
-    @Published var metrics: [WatchHealthMetric] = []
+    // Summary
+    @Published var heartRateStats = HeartRateStats()
+    @Published var stepsStats = StepsStats()
+
+    // Chart data
+    @Published var heartRateHistory: [HealthDataPoint] = []
+    @Published var hourlySteps: [HourlySteps] = []
+
+    // State
     @Published var isLoading = false
     @Published var lastRefreshDate: Date?
 
     private let store = HKHealthStore()
     private var refreshTask: Task<Void, Never>?
 
-    private static let displayedMetrics: [(identifier: HKQuantityTypeIdentifier, name: String, icon: String, color: String, unit: HKUnit, displayUnit: String)] = [
-        (.heartRate, "Heart Rate", "heart.fill", "red",
-         HKUnit.count().unitDivided(by: .minute()), "BPM"),
-        (.oxygenSaturation, "Blood Oxygen", "lungs.fill", "blue",
-         HKUnit.percent(), "%"),
-        (.stepCount, "Steps", "figure.walk", "orange",
-         HKUnit.count(), "steps"),
-        (.respiratoryRate, "Resp. Rate", "wind", "teal",
-         HKUnit.count().unitDivided(by: .minute()), "br/min"),
-    ]
+    // MARK: - Load All Data
 
-    init() {
-        metrics = Self.displayedMetrics.map { config in
-            WatchHealthMetric(
-                id: config.identifier.rawValue,
-                displayName: config.name,
-                icon: config.icon,
-                color: config.color,
-                latestValue: nil,
-                unit: config.displayUnit,
-                lastUpdated: nil,
-                recentValues: []
-            )
-        }
-    }
-
-    func loadLatestValues() async {
-        let dateFormatter = ISO8601DateFormatter()
-        dateFormatter.formatOptions = [.withFullDate, .withFullTime, .withFractionalSeconds]
-
-        Logger.healthKit.info("━━━ Loading latest health values ━━━")
-        Logger.healthKit.info("Metrics to fetch: \(Self.displayedMetrics.map(\.name).joined(separator: ", "))")
+    func loadAllData() async {
+        Logger.healthKit.info("━━━ Loading Phase 1 health data (HR + Steps) ━━━")
         isLoading = lastRefreshDate == nil
 
-        for (index, config) in Self.displayedMetrics.enumerated() {
-            guard let quantityType = HKQuantityType.quantityType(forIdentifier: config.identifier) else {
-                Logger.healthKit.warning("Could not create quantity type for \(config.identifier.rawValue)")
-                continue
-            }
-
-            let authStatus = store.authorizationStatus(for: quantityType)
-            let authString: String
-            switch authStatus {
-            case .notDetermined: authString = "notDetermined"
-            case .sharingDenied: authString = "denied"
-            case .sharingAuthorized: authString = "authorized"
-            @unknown default: authString = "unknown"
-            }
-
-            Logger.healthKit.info("[\(config.name)] type: \(config.identifier.rawValue), HKUnit: \(config.unit.unitString), displayUnit: \(config.displayUnit), auth: \(authString)")
-
-            if let sample = await fetchMostRecentSample(for: quantityType) {
-                var value = sample.quantity.doubleValue(for: config.unit)
-                if config.identifier == .oxygenSaturation {
-                    value *= 100.0
-                }
-                metrics[index].latestValue = value
-                metrics[index].lastUpdated = sample.startDate
-
-                Logger.healthKit.info("[\(config.name)] latest: \(String(format: "%.2f", value)) \(config.displayUnit)")
-                Logger.healthKit.info("[\(config.name)] startDate: \(dateFormatter.string(from: sample.startDate))")
-                Logger.healthKit.info("[\(config.name)] endDate: \(dateFormatter.string(from: sample.endDate))")
-                Logger.healthKit.info("[\(config.name)] source: \(sample.sourceRevision.source.name) (\(sample.sourceRevision.source.bundleIdentifier))")
-                Logger.healthKit.info("[\(config.name)] device: \(sample.device?.name ?? "unknown") (\(sample.device?.model ?? "unknown"))")
-                Logger.healthKit.info("[\(config.name)] uuid: \(sample.uuid.uuidString)")
-            } else {
-                Logger.healthKit.info("[\(config.name)] latest: nil — no sample available")
-            }
-
-            let recentSamples = await fetchRecentSamples(for: quantityType, limit: 6)
-            metrics[index].recentValues = recentSamples.map { sample in
-                var value = sample.quantity.doubleValue(for: config.unit)
-                if config.identifier == .oxygenSaturation {
-                    value *= 100.0
-                }
-                return value
-            }
-
-            if !recentSamples.isEmpty {
-                let valuesStr = recentSamples.enumerated().map { i, sample in
-                    var v = sample.quantity.doubleValue(for: config.unit)
-                    if config.identifier == .oxygenSaturation { v *= 100.0 }
-                    return "  [\(i)] \(String(format: "%.2f", v)) \(config.displayUnit) @ \(dateFormatter.string(from: sample.startDate)) src=\(sample.sourceRevision.source.name)"
-                }.joined(separator: "\n")
-                Logger.healthKit.info("[\(config.name)] recent (\(recentSamples.count) samples):\n\(valuesStr)")
-            } else {
-                Logger.healthKit.info("[\(config.name)] recent: no samples")
-            }
-        }
-
-        if let stepIndex = Self.displayedMetrics.firstIndex(where: { $0.identifier == .stepCount }),
-           let todaySteps = await fetchTodayCumulativeSteps() {
-            metrics[stepIndex].latestValue = todaySteps
-            metrics[stepIndex].lastUpdated = Date()
-            Logger.healthKit.info("[Steps] today cumulative: \(Int(todaySteps)) steps")
-        } else {
-            Logger.healthKit.info("[Steps] today cumulative: unavailable")
-        }
+        async let hr: () = loadHeartRateData()
+        async let steps: () = loadStepsData()
+        _ = await (hr, steps)
 
         isLoading = false
         lastRefreshDate = Date()
+        logSummary()
+    }
 
-        Logger.healthKit.info("━━━ Refresh summary ━━━")
-        for metric in metrics {
-            let valueStr = metric.latestValue.map { String(format: "%.2f", $0) } ?? "nil"
-            let dateStr = metric.lastUpdated.map { dateFormatter.string(from: $0) } ?? "never"
-            Logger.healthKit.info("  \(metric.displayName): \(valueStr) \(metric.unit) (updated: \(dateStr), history: \(metric.recentValues.count) pts)")
+    // MARK: - Heart Rate
+
+    private func loadHeartRateData() async {
+        guard let hrType = HKQuantityType.quantityType(forIdentifier: .heartRate) else { return }
+        let bpmUnit = HKUnit.count().unitDivided(by: .minute())
+
+        // Today's statistics (min/max/avg)
+        let startOfDay = Calendar.current.startOfDay(for: Date())
+        let predicate = HKQuery.predicateForSamples(withStart: startOfDay, end: Date(), options: .strictStartDate)
+
+        let stats = await fetchStatistics(for: hrType, predicate: predicate, options: [.discreteMin, .discreteMax, .discreteAverage])
+        heartRateStats.min = stats?.minimumQuantity()?.doubleValue(for: bpmUnit)
+        heartRateStats.max = stats?.maximumQuantity()?.doubleValue(for: bpmUnit)
+        heartRateStats.avg = stats?.averageQuantity()?.doubleValue(for: bpmUnit)
+
+        Logger.healthKit.info("[HeartRate] today — min: \(self.heartRateStats.min.map { String(format: "%.0f", $0) } ?? "nil"), max: \(self.heartRateStats.max.map { String(format: "%.0f", $0) } ?? "nil"), avg: \(self.heartRateStats.avg.map { String(format: "%.0f", $0) } ?? "nil")")
+
+        // Most recent reading
+        if let sample = await fetchMostRecentSample(for: hrType) {
+            let value = sample.quantity.doubleValue(for: bpmUnit)
+            heartRateStats.current = value
+            heartRateStats.lastUpdated = sample.startDate
+            Logger.healthKit.info("[HeartRate] current: \(String(format: "%.0f", value)) BPM from \(sample.startDate)")
         }
-        Logger.healthKit.info("━━━ Refresh complete ━━━")
+
+        // Last 3 hours of HR samples for line chart
+        let threeHoursAgo = Date().addingTimeInterval(-3 * 3600)
+        let recentPredicate = HKQuery.predicateForSamples(withStart: threeHoursAgo, end: Date(), options: .strictStartDate)
+        let samples = await fetchSamples(for: hrType, predicate: recentPredicate, limit: 100)
+        heartRateHistory = samples.map { sample in
+            HealthDataPoint(date: sample.startDate, value: sample.quantity.doubleValue(for: bpmUnit))
+        }
+        Logger.healthKit.info("[HeartRate] chart: \(self.heartRateHistory.count) data points (last 3h)")
+    }
+
+    // MARK: - Steps
+
+    private func loadStepsData() async {
+        guard let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount) else { return }
+        let countUnit = HKUnit.count()
+
+        // Today's cumulative steps
+        let startOfDay = Calendar.current.startOfDay(for: Date())
+        let predicate = HKQuery.predicateForSamples(withStart: startOfDay, end: Date(), options: .strictStartDate)
+
+        let stats = await fetchStatistics(for: stepType, predicate: predicate, options: .cumulativeSum)
+        if let sum = stats?.sumQuantity()?.doubleValue(for: countUnit) {
+            stepsStats.totalToday = sum
+            stepsStats.lastUpdated = Date()
+            Logger.healthKit.info("[Steps] today total: \(Int(sum)) steps")
+        }
+
+        // Hourly breakdown for bar chart
+        let hourlyData = await fetchHourlySteps(from: startOfDay, to: Date())
+        hourlySteps = hourlyData
+        Logger.healthKit.info("[Steps] hourly: \(hourlyData.count) buckets")
+        for bucket in hourlyData where bucket.steps > 0 {
+            Logger.healthKit.debug("[Steps]   hour \(bucket.hour): \(Int(bucket.steps)) steps")
+        }
     }
 
     // MARK: - HealthKit Queries
 
-    private func fetchMostRecentSample(for quantityType: HKQuantityType) async -> HKQuantitySample? {
+    private func fetchStatistics(for type: HKQuantityType, predicate: NSPredicate?, options: HKStatisticsOptions) async -> HKStatistics? {
+        await withCheckedContinuation { continuation in
+            let query = HKStatisticsQuery(quantityType: type, quantitySamplePredicate: predicate, options: options) { _, stats, error in
+                if let error {
+                    Logger.healthKit.error("Statistics query failed for \(type.identifier): \(error.localizedDescription)")
+                }
+                continuation.resume(returning: stats)
+            }
+            store.execute(query)
+        }
+    }
+
+    private func fetchMostRecentSample(for type: HKQuantityType) async -> HKQuantitySample? {
         await withCheckedContinuation { continuation in
             let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)
-            let query = HKSampleQuery(
-                sampleType: quantityType,
-                predicate: nil,
-                limit: 1,
-                sortDescriptors: [sort]
-            ) { _, results, _ in
+            let query = HKSampleQuery(sampleType: type, predicate: nil, limit: 1, sortDescriptors: [sort]) { _, results, _ in
                 continuation.resume(returning: results?.first as? HKQuantitySample)
             }
             store.execute(query)
         }
     }
 
-    private func fetchRecentSamples(for quantityType: HKQuantityType, limit: Int) async -> [HKQuantitySample] {
+    private func fetchSamples(for type: HKQuantityType, predicate: NSPredicate?, limit: Int) async -> [HKQuantitySample] {
         await withCheckedContinuation { continuation in
-            let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)
-            let query = HKSampleQuery(
-                sampleType: quantityType,
-                predicate: nil,
-                limit: limit,
-                sortDescriptors: [sort]
-            ) { _, results, _ in
+            let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
+            let query = HKSampleQuery(sampleType: type, predicate: predicate, limit: limit, sortDescriptors: [sort]) { _, results, _ in
                 let samples = (results as? [HKQuantitySample]) ?? []
-                continuation.resume(returning: samples.reversed())
+                continuation.resume(returning: samples)
             }
             store.execute(query)
         }
     }
 
-    private func fetchTodayCumulativeSteps() async -> Double? {
-        guard let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount) else { return nil }
-
-        let startOfDay = Calendar.current.startOfDay(for: Date())
-        let predicate = HKQuery.predicateForSamples(withStart: startOfDay, end: Date(), options: .strictStartDate)
+    private func fetchHourlySteps(from start: Date, to end: Date) async -> [HourlySteps] {
+        guard let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount) else { return [] }
+        let countUnit = HKUnit.count()
+        let calendar = Calendar.current
+        let predicate = HKQuery.predicateForSamples(withStart: start, end: end, options: .strictStartDate)
 
         return await withCheckedContinuation { continuation in
-            let query = HKStatisticsQuery(
+            let interval = DateComponents(hour: 1)
+            let query = HKStatisticsCollectionQuery(
                 quantityType: stepType,
                 quantitySamplePredicate: predicate,
-                options: .cumulativeSum
-            ) { _, statistics, _ in
-                let sum = statistics?.sumQuantity()?.doubleValue(for: HKUnit.count())
-                continuation.resume(returning: sum)
+                options: .cumulativeSum,
+                anchorDate: start,
+                intervalComponents: interval
+            )
+
+            query.initialResultsHandler = { _, collection, error in
+                guard let collection else {
+                    if let error {
+                        Logger.healthKit.error("Hourly steps query failed: \(error.localizedDescription)")
+                    }
+                    continuation.resume(returning: [])
+                    return
+                }
+
+                var buckets: [HourlySteps] = []
+                collection.enumerateStatistics(from: start, to: end) { stats, _ in
+                    let hour = calendar.component(.hour, from: stats.startDate)
+                    let steps = stats.sumQuantity()?.doubleValue(for: countUnit) ?? 0
+                    buckets.append(HourlySteps(hour: hour, date: stats.startDate, steps: steps))
+                }
+                continuation.resume(returning: buckets)
             }
             store.execute(query)
         }
@@ -197,14 +225,22 @@ final class WatchHealthDataViewModel: ObservableObject {
                 try? await Task.sleep(nanoseconds: 60_000_000_000)
                 guard !Task.isCancelled else { break }
                 Logger.healthKit.debug("Auto-refresh triggered")
-                await loadLatestValues()
+                await loadAllData()
             }
         }
     }
 
     func stopAutoRefresh() {
-        Logger.healthKit.info("Auto-refresh stopped")
         refreshTask?.cancel()
         refreshTask = nil
+    }
+
+    // MARK: - Logging
+
+    private func logSummary() {
+        Logger.healthKit.info("━━━ Refresh summary ━━━")
+        Logger.healthKit.info("  Heart Rate — current: \(self.heartRateStats.current.map { String(format: "%.0f", $0) } ?? "nil") BPM, min: \(self.heartRateStats.min.map { String(format: "%.0f", $0) } ?? "-"), max: \(self.heartRateStats.max.map { String(format: "%.0f", $0) } ?? "-"), avg: \(self.heartRateStats.avg.map { String(format: "%.0f", $0) } ?? "-"), chart pts: \(self.heartRateHistory.count)")
+        Logger.healthKit.info("  Steps — total: \(Int(self.stepsStats.totalToday))/\(Int(self.stepsStats.goal)) (\(Int(self.stepsStats.progress * 100))%), hourly buckets: \(self.hourlySteps.count)")
+        Logger.healthKit.info("━━━ Refresh complete ━━━")
     }
 }

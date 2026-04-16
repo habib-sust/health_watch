@@ -15,21 +15,18 @@ final class HealthKitCollector {
 
     // MARK: - Read Types
 
+    /// Phase 1: Heart Rate + Steps only.
+    /// Additional types (SpO2, HRV, respiratory rate, sleep) will be added in Phase 2.
     static let readTypes: Set<HKObjectType> = {
         var types = Set<HKObjectType>()
         let quantityTypes: [HKQuantityTypeIdentifier] = [
-            .heartRate, .restingHeartRate,
-            .heartRateVariabilitySDNN, .oxygenSaturation,
-            .stepCount, .activeEnergyBurned,
-            .respiratoryRate, .walkingHeartRateAverage
+            .heartRate,
+            .stepCount,
         ]
         for id in quantityTypes {
             if let t = HKQuantityType.quantityType(forIdentifier: id) {
                 types.insert(t)
             }
-        }
-        if let sleep = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) {
-            types.insert(sleep)
         }
         return types
     }()
@@ -198,38 +195,20 @@ final class HealthKitCollector {
         return nil
     }
 
+    /// Phase 1: extract heart rate (BPM) or step count
     private func extractQuantity(_ sample: HKQuantitySample) -> (Double, String) {
         let typeId = sample.quantityType.identifier
 
         switch typeId {
-        case HKQuantityTypeIdentifier.heartRate.rawValue,
-             HKQuantityTypeIdentifier.restingHeartRate.rawValue,
-             HKQuantityTypeIdentifier.walkingHeartRateAverage.rawValue:
+        case HKQuantityTypeIdentifier.heartRate.rawValue:
             let unit = HKUnit.count().unitDivided(by: .minute())
-            return (sample.quantity.doubleValue(for: unit), "count/min")
-
-        case HKQuantityTypeIdentifier.heartRateVariabilitySDNN.rawValue:
-            let unit = HKUnit.secondUnit(with: .milli)
-            return (sample.quantity.doubleValue(for: unit), "ms")
-
-        case HKQuantityTypeIdentifier.oxygenSaturation.rawValue:
-            let unit = HKUnit.percent()
-            return (sample.quantity.doubleValue(for: unit) * 100.0, "%")
+            return (sample.quantity.doubleValue(for: unit), "BPM")
 
         case HKQuantityTypeIdentifier.stepCount.rawValue:
             let unit = HKUnit.count()
-            return (sample.quantity.doubleValue(for: unit), "count")
-
-        case HKQuantityTypeIdentifier.activeEnergyBurned.rawValue:
-            let unit = HKUnit.kilocalorie()
-            return (sample.quantity.doubleValue(for: unit), "kcal")
-
-        case HKQuantityTypeIdentifier.respiratoryRate.rawValue:
-            let unit = HKUnit.count().unitDivided(by: .minute())
-            return (sample.quantity.doubleValue(for: unit), "breaths/min")
+            return (sample.quantity.doubleValue(for: unit), "steps")
 
         default:
-            // Fallback: try count
             let unit = HKUnit.count()
             return (sample.quantity.doubleValue(for: unit), "count")
         }
