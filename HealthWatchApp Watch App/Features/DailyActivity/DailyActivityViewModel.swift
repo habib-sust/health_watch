@@ -14,6 +14,7 @@ final class DailyActivityViewModel: ObservableObject {
     @Published var hourlySteps: [HourlyStepBucket] = []
 
     @Published var isLoading = false
+    @Published var authCheckDone = false
     @Published var authStatus: HealthAuthStatus = .notDetermined
     @Published var lastRefreshDate: Date?
 
@@ -28,6 +29,7 @@ final class DailyActivityViewModel: ObservableObject {
 
     func onAppear() async {
         authStatus = await service.checkAuthorizationStatus()
+        authCheckDone = true
         guard authStatus == .authorized else { return }
         await refresh()
         startObservers()

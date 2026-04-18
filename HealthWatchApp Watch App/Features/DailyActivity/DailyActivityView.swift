@@ -8,13 +8,17 @@ struct DailyActivityView: View {
     var body: some View {
         NavigationStack {
             Group {
-                switch viewModel.authStatus {
-                case .notDetermined:
-                    Color.clear.onAppear { showOnboarding = true }
-                case .denied:
-                    deniedView
-                case .authorized:
-                    authorizedContent
+                if !viewModel.authCheckDone {
+                    ProgressView()
+                } else {
+                    switch viewModel.authStatus {
+                    case .notDetermined:
+                        Color.clear.onAppear { showOnboarding = true }
+                    case .denied:
+                        deniedView
+                    case .authorized:
+                        authorizedContent
+                    }
                 }
             }
             .navigationTitle("Activity")
