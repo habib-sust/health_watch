@@ -27,7 +27,7 @@ final class DailyActivityViewModel: ObservableObject {
     // MARK: - Lifecycle
 
     func onAppear() async {
-        authStatus = await service.authorizationStatus
+        authStatus = await service.checkAuthorizationStatus()
         guard authStatus == .authorized else { return }
         await refresh()
         startObservers()
@@ -52,7 +52,7 @@ final class DailyActivityViewModel: ObservableObject {
     func requestAccess() async {
         do {
             try await service.requestAuthorization()
-            authStatus = await service.authorizationStatus
+            authStatus = await service.checkAuthorizationStatus()
             if authStatus == .authorized {
                 await refresh()
                 startObservers()

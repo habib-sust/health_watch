@@ -19,15 +19,25 @@ actor HealthKitService {
 
     // MARK: - Authorization
 
-    var authorizationStatus: HealthAuthStatus {
+    /// Check whether we still need to request authorization.
+    /// HealthKit does not expose read-grant status for privacy, so we use
+    /// `statusForAuthorizationRequest` which tells us if the prompt is needed.
+    func checkAuthorizationStatus() async -> HealthAuthStatus {
         guard HKHealthStore.isHealthDataAvailable() else { return .denied }
-        // Check a representative type — if heart rate is determined, we've asked
-        guard let hrType = HKQuantityType.quantityType(forIdentifier: .heartRate) else { return .denied }
-        switch store.authorizationStatus(for: hrType) {
-        case .notDetermined: return .notDetermined
-        case .sharingDenied: return .denied
-        case .sharingAuthorized: return .authorized
-        @unknown default: return .notDetermined
+        do {
+            let status = try await store.statusForAuthorizationRequest(toShare: [], read: readTypes)
+            switch status {
+            case .unnecessary:
+                // Already prompted — treat as authorized (data will be empty if user denied)
+                return .authorized
+            case .shouldRequest:
+                return .notDetermined
+            @unknown default:
+                return .notDetermined
+            }
+        } catch {
+            Logger.healthKit.error("[HealthKitService] Auth status check failed: \(error.localizedDescription)")
+            return .denied
         }
     }
 
