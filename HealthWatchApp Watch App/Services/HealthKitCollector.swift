@@ -19,6 +19,7 @@ final class HealthKitCollector {
         var types = Set<HKObjectType>()
         let quantityTypes: [HKQuantityTypeIdentifier] = [
             .heartRate,
+            .restingHeartRate,
             .stepCount,
         ]
         for id in quantityTypes {

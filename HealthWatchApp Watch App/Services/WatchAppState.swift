@@ -25,18 +25,38 @@ final class WatchAppState: ObservableObject {
     @Published var lastSyncDate: Date?
     @Published var syncStatus: SyncStatus = .idle
     @Published var individualName: String?
+    @Published var healthAuthDone = false
+    @Published var healthAuthStatus: HealthAuthStatus = .notDetermined
 
     private let keychain = KeychainManager()
 
     func initialize() {
-        if let _ = try? keychain.loadProvisioningConfig() {
-            mode = .provisioned
-            individualName = UserDefaults.standard.string(forKey: "provisionedIndividualName")
-            Logger.provisioning.info("Initialized — already provisioned for \(self.individualName ?? "unknown")")
-            startDataCollection()
-        } else {
-            mode = .unprovisioned
-            Logger.provisioning.info("Initialized — unprovisioned")
+        Task {
+            // Check health authorization first
+            healthAuthStatus = await HealthKitService.shared.checkAuthorizationStatus()
+            healthAuthDone = true
+
+            if let _ = try? keychain.loadProvisioningConfig() {
+                mode = .provisioned
+                individualName = UserDefaults.standard.string(forKey: "provisionedIndividualName")
+                Logger.provisioning.info("Initialized — already provisioned for \(self.individualName ?? "unknown")")
+                startDataCollection()
+            } else {
+                mode = .unprovisioned
+                Logger.provisioning.info("Initialized — unprovisioned")
+            }
+        }
+    }
+
+    func grantHealthAccess() async {
+        do {
+            try await HealthKitService.shared.requestAuthorization()
+            healthAuthStatus = await HealthKitService.shared.checkAuthorizationStatus()
+            if healthAuthStatus == .authorized {
+                HealthKitCollector.shared.enableBackgroundDelivery()
+            }
+        } catch {
+            Logger.healthKit.error("[WatchAppState] Health authorization error: \(error.localizedDescription)")
         }
     }
 
@@ -107,30 +127,24 @@ final class WatchAppState: ObservableObject {
         return "\(code[..<idx])-\(code[idx...])"
     }
 
-    /// Start HealthKit collection and background scheduling after provisioning
+    /// Start HealthKit collection and background scheduling after provisioning.
+    /// Note: HealthKit authorization is deferred to DailyActivityView's onboarding
+    /// flow so the user sees our explanation page before the system permission alert.
     func startDataCollection() {
-        Logger.provisioning.info("Starting data collection pipeline")
-        Task {
-            do {
-                try await HealthKitCollector.shared.requestAuthorization()
-                Logger.provisioning.info("HealthKit authorization granted")
+        Logger.provisioning.info("Starting data collection pipeline (auth deferred to onboarding)")
 
-                HealthKitCollector.shared.restoreAnchors()
-                HealthKitCollector.shared.enableBackgroundDelivery()
-                Logger.provisioning.info("HealthKit observer queries and background delivery enabled")
+        HealthKitCollector.shared.restoreAnchors()
+        HealthKitCollector.shared.enableBackgroundDelivery()
+        Logger.provisioning.info("HealthKit observer queries and background delivery enabled")
 
-                HealthKitCollector.shared.onNewSamplesReceived = { samples in
-                    let batchId = UUID()
-                    Logger.provisioning.debug("Received \(samples.count) new samples — batchId: \(batchId)")
-                    LocalBufferManager.shared.buffer(samples, batchId: batchId)
-                }
-
-                BackgroundTaskScheduler.shared.scheduleNextRefresh()
-                Logger.provisioning.info("Data collection started successfully")
-            } catch {
-                Logger.provisioning.error("HealthKit authorization failed: \(error.localizedDescription)")
-            }
+        HealthKitCollector.shared.onNewSamplesReceived = { samples in
+            let batchId = UUID()
+            Logger.provisioning.debug("Received \(samples.count) new samples — batchId: \(batchId)")
+            LocalBufferManager.shared.buffer(samples, batchId: batchId)
         }
+
+        BackgroundTaskScheduler.shared.scheduleNextRefresh()
+        Logger.provisioning.info("Data collection started successfully")
     }
 
     func handleError(_ error: WatchError) {

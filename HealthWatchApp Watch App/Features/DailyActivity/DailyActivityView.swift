@@ -3,32 +3,13 @@ import Charts
 
 struct DailyActivityView: View {
     @StateObject private var viewModel = DailyActivityViewModel()
-    @State private var showOnboarding = false
 
     var body: some View {
         NavigationStack {
-            Group {
-                if !viewModel.authCheckDone {
-                    ProgressView()
-                } else {
-                    switch viewModel.authStatus {
-                    case .notDetermined:
-                        Color.clear.onAppear { showOnboarding = true }
-                    case .denied:
-                        deniedView
-                    case .authorized:
-                        authorizedContent
-                    }
-                }
-            }
-            .navigationTitle("Activity")
-            .task { await viewModel.onAppear() }
-            .onDisappear { viewModel.onDisappear() }
-            .sheet(isPresented: $showOnboarding) {
-                HealthOnboardingView {
-                    Task { await viewModel.requestAccess() }
-                }
-            }
+            authorizedContent
+                .navigationTitle("Activity")
+                .task { await viewModel.onAppear() }
+                .onDisappear { viewModel.onDisappear() }
         }
     }
 
@@ -274,25 +255,4 @@ struct DailyActivityView: View {
         }
     }
 
-    // MARK: - Denied Permission View
-
-    private var deniedView: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "heart.slash")
-                .font(.title)
-                .foregroundStyle(.secondary)
-            Text("Health Access Required")
-                .font(.caption.bold())
-            Text("Therap needs access to your health data to show activity summaries.")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-            Button("Grant Access") {
-                Task { await viewModel.requestAccess() }
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(.blue)
-        }
-        .padding()
-    }
 }

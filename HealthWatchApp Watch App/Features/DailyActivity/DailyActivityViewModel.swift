@@ -14,8 +14,6 @@ final class DailyActivityViewModel: ObservableObject {
     @Published var hourlySteps: [HourlyStepBucket] = []
 
     @Published var isLoading = false
-    @Published var authCheckDone = false
-    @Published var authStatus: HealthAuthStatus = .notDetermined
     @Published var lastRefreshDate: Date?
 
     // MARK: - Private
@@ -28,9 +26,6 @@ final class DailyActivityViewModel: ObservableObject {
     // MARK: - Lifecycle
 
     func onAppear() async {
-        authStatus = await service.checkAuthorizationStatus()
-        authCheckDone = true
-        guard authStatus == .authorized else { return }
         await refresh()
         startObservers()
         startAutoRefresh()
@@ -46,22 +41,6 @@ final class DailyActivityViewModel: ObservableObject {
         let store = self.store
         for query in queries {
             store.stop(query)
-        }
-    }
-
-    // MARK: - Authorization
-
-    func requestAccess() async {
-        do {
-            try await service.requestAuthorization()
-            authStatus = await service.checkAuthorizationStatus()
-            if authStatus == .authorized {
-                await refresh()
-                startObservers()
-                startAutoRefresh()
-            }
-        } catch {
-            Logger.healthKit.error("[DailyActivityVM] Authorization error: \(error.localizedDescription)")
         }
     }
 

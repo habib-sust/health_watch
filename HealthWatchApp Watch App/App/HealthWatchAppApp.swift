@@ -8,18 +8,27 @@ struct HealthWatchApp_Watch_AppApp: App {
     var body: some Scene {
         WindowGroup {
             Group {
-                switch appState.mode {
-                case .unprovisioned:
-                    WatchUnprovisionedView()
+                if !appState.healthAuthDone {
+                    ProgressView()
+                } else if appState.healthAuthStatus != .authorized {
+                    // Health permission needed before anything else
+                    HealthOnboardingView {
+                        Task { await appState.grantHealthAccess() }
+                    }
+                } else {
+                    switch appState.mode {
+                    case .unprovisioned:
+                        WatchUnprovisionedView()
 
-                case .showingCode(let deviceCode):
-                    WatchProvisionCodeView(deviceCode: deviceCode)
+                    case .showingCode(let deviceCode):
+                        WatchProvisionCodeView(deviceCode: deviceCode)
 
-                case .provisioned:
-                    WatchProvisionedTabView()
+                    case .provisioned:
+                        WatchProvisionedTabView()
 
-                case .error(let error):
-                    WatchErrorView(error: error)
+                    case .error(let error):
+                        WatchErrorView(error: error)
+                    }
                 }
             }
             .environmentObject(appState)
