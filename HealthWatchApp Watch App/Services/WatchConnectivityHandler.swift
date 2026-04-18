@@ -22,6 +22,15 @@ final class WatchConnectivityHandler: NSObject {
 
         session?.sendMessage(dict, replyHandler: nil, errorHandler: nil)
     }
+
+    func sendSOS() {
+        let message = ProvisioningMessage(type: .sos)
+        guard let data = try? JSONEncoder().encode(message),
+              let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return }
+
+        session?.sendMessage(dict, replyHandler: nil, errorHandler: nil)
+    }
 }
 
 extension WatchConnectivityHandler: WCSessionDelegate {

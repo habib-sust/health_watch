@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import WatchConnectivity
+import UserNotifications
 
 final class WatchConnectivityManager: NSObject, ObservableObject {
     @Published var isReachable = false
@@ -56,6 +57,8 @@ extension WatchConnectivityManager: WCSessionDelegate {
         switch msg.type {
         case .ack:
             DispatchQueue.main.async { self.onAckReceived?() }
+        case .sos:
+            scheduleSOSNotification()
         default:
             break
         }
@@ -64,4 +67,20 @@ extension WatchConnectivityManager: WCSessionDelegate {
     // Required stubs for iOS
     func sessionDidBecomeInactive(_ session: WCSession) {}
     func sessionDidDeactivate(_ session: WCSession) { session.activate() }
+
+    private func scheduleSOSNotification() {
+        let content = UNMutableNotificationContent()
+        content.title = "SOS Alert"
+        content.body = "An individual has triggered an SOS alert from their watch. Immediate attention required."
+        content.sound = .defaultCritical
+        content.interruptionLevel = .critical
+
+        let request = UNNotificationRequest(
+            identifier: "sos-\(UUID().uuidString)",
+            content: content,
+            trigger: nil // deliver immediately
+        )
+
+        UNUserNotificationCenter.current().add(request)
+    }
 }

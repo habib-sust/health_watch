@@ -1,4 +1,5 @@
 import SwiftUI
+import UserNotifications
 
 @main
 struct HealthWatchApp: App {
@@ -8,6 +9,15 @@ struct HealthWatchApp: App {
         WindowGroup {
             MainTabView()
                 .environmentObject(watchManager)
+                .onAppear {
+                    requestNotificationPermission()
+                }
         }
+    }
+
+    private func requestNotificationPermission() {
+        UNUserNotificationCenter.current().requestAuthorization(
+            options: [.alert, .sound, .badge]
+        ) { _, _ in }
     }
 }
