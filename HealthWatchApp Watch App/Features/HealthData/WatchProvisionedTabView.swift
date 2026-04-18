@@ -5,7 +5,7 @@ struct WatchProvisionedTabView: View {
 
     var body: some View {
         TabView {
-            WatchHealthDataView()
+            DailyActivityView()
             WatchSOSView()
             WatchStatusView()
         }
