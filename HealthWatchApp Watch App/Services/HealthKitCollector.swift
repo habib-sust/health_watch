@@ -15,8 +15,6 @@ final class HealthKitCollector {
 
     // MARK: - Read Types
 
-    /// Phase 1: Heart Rate + Steps only.
-    /// Additional types (SpO2, HRV, respiratory rate, sleep) will be added in Phase 2.
     static let readTypes: Set<HKObjectType> = {
         var types = Set<HKObjectType>()
         let quantityTypes: [HKQuantityTypeIdentifier] = [
@@ -28,6 +26,7 @@ final class HealthKitCollector {
                 types.insert(t)
             }
         }
+        types.insert(HKCategoryType(.sleepAnalysis))
         return types
     }()
 

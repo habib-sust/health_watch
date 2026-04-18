@@ -1,6 +1,7 @@
 import Foundation
 import HealthKit
 import Combine
+import SwiftUI
 import os
 
 // MARK: - Data Models
@@ -48,6 +49,73 @@ struct StepsStats {
     }
 }
 
+/// Sleep stage for charting
+enum SleepStage: String, CaseIterable {
+    case awake = "Awake"
+    case rem = "REM"
+    case core = "Core"
+    case deep = "Deep"
+    case unspecified = "Asleep"
+
+    var color: Color {
+        switch self {
+        case .awake: return .orange
+        case .rem: return .cyan
+        case .core: return .indigo
+        case .deep: return .purple
+        case .unspecified: return .blue
+        }
+    }
+
+    var sortOrder: Int {
+        switch self {
+        case .deep: return 0
+        case .core: return 1
+        case .rem: return 2
+        case .unspecified: return 3
+        case .awake: return 4
+        }
+    }
+}
+
+/// A sleep segment for the timeline chart
+struct SleepSegment: Identifiable {
+    let id = UUID()
+    let stage: SleepStage
+    let startDate: Date
+    let endDate: Date
+
+    var duration: TimeInterval { endDate.timeIntervalSince(startDate) }
+}
+
+/// Summary of last night's sleep
+struct SleepStats {
+    var totalSleep: TimeInterval = 0
+    var deepSleep: TimeInterval = 0
+    var coreSleep: TimeInterval = 0
+    var remSleep: TimeInterval = 0
+    var awakeTime: TimeInterval = 0
+    var bedtime: Date?
+    var wakeTime: Date?
+
+    var formattedTotal: String { formatDuration(totalSleep) }
+    var formattedDeep: String { formatDuration(deepSleep) }
+    var formattedCore: String { formatDuration(coreSleep) }
+    var formattedREM: String { formatDuration(remSleep) }
+    var formattedAwake: String { formatDuration(awakeTime) }
+
+    var hasSleepData: Bool { totalSleep > 0 }
+
+    private func formatDuration(_ interval: TimeInterval) -> String {
+        let hours = Int(interval) / 3600
+        let minutes = (Int(interval) % 3600) / 60
+        if hours > 0 {
+            return "\(hours)h \(minutes)m"
+        }
+        return "\(minutes)m"
+    }
+}
+
 // MARK: - ViewModel
 
 @MainActor
@@ -55,10 +123,12 @@ final class WatchHealthDataViewModel: ObservableObject {
     // Summary
     @Published var heartRateStats = HeartRateStats()
     @Published var stepsStats = StepsStats()
+    @Published var sleepStats = SleepStats()
 
     // Chart data
     @Published var heartRateHistory: [HealthDataPoint] = []
     @Published var hourlySteps: [HourlySteps] = []
+    @Published var sleepSegments: [SleepSegment] = []
 
     // State
     @Published var isLoading = false
@@ -70,12 +140,13 @@ final class WatchHealthDataViewModel: ObservableObject {
     // MARK: - Load All Data
 
     func loadAllData() async {
-        Logger.healthKit.info("━━━ Loading Phase 1 health data (HR + Steps) ━━━")
+        Logger.healthKit.info("━━━ Loading health data (HR + Steps + Sleep) ━━━")
         isLoading = lastRefreshDate == nil
 
         async let hr: () = loadHeartRateData()
         async let steps: () = loadStepsData()
-        _ = await (hr, steps)
+        async let sleep: () = loadSleepData()
+        _ = await (hr, steps, sleep)
 
         isLoading = false
         lastRefreshDate = Date()
@@ -143,7 +214,86 @@ final class WatchHealthDataViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Sleep
+
+    private func loadSleepData() async {
+        let sleepType = HKCategoryType(.sleepAnalysis)
+
+        // Look for sleep data from the last 24 hours
+        let now = Date()
+        let yesterday = now.addingTimeInterval(-24 * 3600)
+        let predicate = HKQuery.predicateForSamples(withStart: yesterday, end: now, options: .strictStartDate)
+
+        let samples = await fetchCategorySamples(for: sleepType, predicate: predicate)
+        Logger.healthKit.info("[Sleep] fetched \(samples.count) raw sleep samples")
+
+        var segments: [SleepSegment] = []
+        var stats = SleepStats()
+
+        for sample in samples {
+            guard let value = HKCategoryValueSleepAnalysis(rawValue: sample.value) else { continue }
+
+            let stage: SleepStage
+            switch value {
+            case .awake:
+                stage = .awake
+                stats.awakeTime += sample.endDate.timeIntervalSince(sample.startDate)
+            case .asleepCore:
+                stage = .core
+                stats.coreSleep += sample.endDate.timeIntervalSince(sample.startDate)
+            case .asleepDeep:
+                stage = .deep
+                stats.deepSleep += sample.endDate.timeIntervalSince(sample.startDate)
+            case .asleepREM:
+                stage = .rem
+                stats.remSleep += sample.endDate.timeIntervalSince(sample.startDate)
+            case .asleepUnspecified:
+                stage = .unspecified
+                stats.coreSleep += sample.endDate.timeIntervalSince(sample.startDate)
+            case .inBed:
+                // Track bedtime/wake time from inBed samples but don't add as sleep segment
+                if stats.bedtime == nil || sample.startDate < stats.bedtime! {
+                    stats.bedtime = sample.startDate
+                }
+                if stats.wakeTime == nil || sample.endDate > stats.wakeTime! {
+                    stats.wakeTime = sample.endDate
+                }
+                continue
+            @unknown default:
+                continue
+            }
+
+            segments.append(SleepSegment(stage: stage, startDate: sample.startDate, endDate: sample.endDate))
+        }
+
+        stats.totalSleep = stats.deepSleep + stats.coreSleep + stats.remSleep
+
+        // If no inBed samples, derive bedtime/wake from sleep segments
+        if stats.bedtime == nil, let earliest = segments.min(by: { $0.startDate < $1.startDate }) {
+            stats.bedtime = earliest.startDate
+        }
+        if stats.wakeTime == nil, let latest = segments.max(by: { $0.endDate < $1.endDate }) {
+            stats.wakeTime = latest.endDate
+        }
+
+        sleepSegments = segments.sorted { $0.startDate < $1.startDate }
+        sleepStats = stats
+
+        Logger.healthKit.info("[Sleep] total: \(stats.formattedTotal), deep: \(stats.formattedDeep), core: \(stats.formattedCore), REM: \(stats.formattedREM), awake: \(stats.formattedAwake)")
+    }
+
     // MARK: - HealthKit Queries
+
+    private func fetchCategorySamples(for type: HKCategoryType, predicate: NSPredicate?) async -> [HKCategorySample] {
+        await withCheckedContinuation { continuation in
+            let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
+            let query = HKSampleQuery(sampleType: type, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: [sort]) { _, results, _ in
+                let samples = (results as? [HKCategorySample]) ?? []
+                continuation.resume(returning: samples)
+            }
+            store.execute(query)
+        }
+    }
 
     private func fetchStatistics(for type: HKQuantityType, predicate: NSPredicate?, options: HKStatisticsOptions) async -> HKStatistics? {
         await withCheckedContinuation { continuation in
@@ -241,6 +391,7 @@ final class WatchHealthDataViewModel: ObservableObject {
         Logger.healthKit.info("━━━ Refresh summary ━━━")
         Logger.healthKit.info("  Heart Rate — current: \(self.heartRateStats.current.map { String(format: "%.0f", $0) } ?? "nil") BPM, min: \(self.heartRateStats.min.map { String(format: "%.0f", $0) } ?? "-"), max: \(self.heartRateStats.max.map { String(format: "%.0f", $0) } ?? "-"), avg: \(self.heartRateStats.avg.map { String(format: "%.0f", $0) } ?? "-"), chart pts: \(self.heartRateHistory.count)")
         Logger.healthKit.info("  Steps — total: \(Int(self.stepsStats.totalToday))/\(Int(self.stepsStats.goal)) (\(Int(self.stepsStats.progress * 100))%), hourly buckets: \(self.hourlySteps.count)")
+        Logger.healthKit.info("  Sleep — total: \(self.sleepStats.formattedTotal), segments: \(self.sleepSegments.count)")
         Logger.healthKit.info("━━━ Refresh complete ━━━")
     }
 }

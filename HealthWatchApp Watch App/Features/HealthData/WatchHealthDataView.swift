@@ -17,6 +17,7 @@ struct WatchHealthDataView: View {
                     VStack(spacing: 10) {
                         heartRateCard
                         stepsCard
+                        sleepCard
                         dailySummaryCard
                         syncFooter
                     }
@@ -169,6 +170,86 @@ struct WatchHealthDataView: View {
         .buttonStyle(.plain)
     }
 
+    // MARK: - Sleep Card
+
+    private var sleepCard: some View {
+        NavigationLink {
+            SleepDetailView(viewModel: viewModel)
+        } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Image(systemName: "bed.double.fill")
+                        .foregroundStyle(.indigo)
+                    Text("Sleep")
+                        .font(.caption.bold())
+                    Spacer()
+                    if viewModel.sleepStats.hasSleepData {
+                        HStack(alignment: .firstTextBaseline, spacing: 2) {
+                            Text(viewModel.sleepStats.formattedTotal)
+                                .font(.system(.title3, design: .rounded).bold())
+                        }
+                    } else {
+                        Text("--")
+                            .font(.title3.bold())
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                if viewModel.sleepStats.hasSleepData {
+                    // Stage breakdown bar
+                    sleepStageBar
+
+                    if let bedtime = viewModel.sleepStats.bedtime,
+                       let wake = viewModel.sleepStats.wakeTime {
+                        HStack {
+                            Label(bedtime.formatted(.dateTime.hour().minute()), systemImage: "moon.fill")
+                            Spacer()
+                            Label(wake.formatted(.dateTime.hour().minute()), systemImage: "sun.max.fill")
+                        }
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .padding(10)
+            .background(Color(.darkGray).opacity(0.3))
+            .cornerRadius(12)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var sleepStageBar: some View {
+        GeometryReader { geo in
+            let stats = viewModel.sleepStats
+            let total = stats.totalSleep + stats.awakeTime
+            HStack(spacing: 1) {
+                if total > 0 {
+                    if stats.deepSleep > 0 {
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(Color.purple)
+                            .frame(width: max(geo.size.width * stats.deepSleep / total - 1, 2))
+                    }
+                    if stats.coreSleep > 0 {
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(Color.indigo)
+                            .frame(width: max(geo.size.width * stats.coreSleep / total - 1, 2))
+                    }
+                    if stats.remSleep > 0 {
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(Color.cyan)
+                            .frame(width: max(geo.size.width * stats.remSleep / total - 1, 2))
+                    }
+                    if stats.awakeTime > 0 {
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(Color.orange)
+                            .frame(width: max(geo.size.width * stats.awakeTime / total - 1, 2))
+                    }
+                }
+            }
+        }
+        .frame(height: 6)
+    }
+
     // MARK: - Daily Summary Card
 
     private var dailySummaryCard: some View {
@@ -189,6 +270,12 @@ struct WatchHealthDataView: View {
                     color: .green,
                     value: viewModel.stepsStats.formattedTotal,
                     label: "Steps"
+                )
+                summaryItem(
+                    icon: "bed.double.fill",
+                    color: .indigo,
+                    value: viewModel.sleepStats.hasSleepData ? viewModel.sleepStats.formattedTotal : "--",
+                    label: "Sleep"
                 )
             }
         }
