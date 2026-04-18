@@ -10,6 +10,7 @@ struct ActivitySleepDetailView: View {
                 if let sleep = viewModel.sleep, sleep.hasSleepData {
                     totalSleepHeader(sleep)
                     stageBreakdownChart(sleep)
+                    timelineChart(sleep)
                     statsGrid(sleep)
                 } else {
                     noDataView
@@ -76,6 +77,46 @@ struct ActivitySleepDetailView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+            }
+        }
+        .padding(10)
+        .background(Color(.darkGray).opacity(0.3))
+        .cornerRadius(12)
+    }
+
+    // MARK: - Timeline Chart
+
+    private func timelineChart(_ sleep: SleepSession) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Timeline")
+                .font(.caption2.bold())
+                .foregroundStyle(.secondary)
+
+            if sleep.segments.count >= 2 {
+                Chart(sleep.segments) { segment in
+                    BarMark(
+                        xStart: .value("Start", segment.startDate),
+                        xEnd: .value("End", segment.endDate),
+                        y: .value("Sleep", "Sleep")
+                    )
+                    .foregroundStyle(segment.stage.color)
+                }
+                .chartXAxis {
+                    AxisMarks(values: .automatic(desiredCount: 4)) { value in
+                        AxisValueLabel {
+                            if let date = value.as(Date.self) {
+                                Text(date, format: .dateTime.hour().minute())
+                                    .font(.system(size: 8))
+                            }
+                        }
+                    }
+                }
+                .chartYAxis(.hidden)
+                .frame(height: 30)
+            } else {
+                Text("Not enough data for timeline")
+                    .font(.system(size: 9))
+                    .foregroundStyle(.tertiary)
             }
         }
         .padding(10)

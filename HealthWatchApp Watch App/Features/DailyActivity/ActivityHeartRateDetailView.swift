@@ -27,11 +27,18 @@ struct ActivityHeartRateDetailView: View {
                 HStack(spacing: 0) {
                     statItem(label: "Resting", value: viewModel.heartRate.resting.map { "\(Int($0))" } ?? "--", color: .pink)
                     Divider().frame(height: 30)
-                    statItem(label: "Range", value: viewModel.heartRate.rangeText, color: .red)
+                    statItem(label: "Min", value: viewModel.heartRate.min.map { "\(Int($0))" } ?? "--", color: .red.opacity(0.6))
+                    Divider().frame(height: 30)
+                    statItem(label: "Max", value: viewModel.heartRate.max.map { "\(Int($0))" } ?? "--", color: .red)
                 }
                 .padding(10)
                 .background(Color(.darkGray).opacity(0.3))
                 .cornerRadius(12)
+
+                // Range bar
+                if let lo = viewModel.heartRate.min, let hi = viewModel.heartRate.max {
+                    rangeBar(min: lo, max: hi, current: viewModel.heartRate.current)
+                }
 
                 // Line chart
                 if viewModel.heartRateHistory.count >= 2 {
@@ -81,6 +88,58 @@ struct ActivityHeartRateDetailView: View {
             .padding(.horizontal, 4)
         }
         .navigationTitle("Heart Rate")
+    }
+
+    // MARK: - Range Bar
+
+    private func rangeBar(min: Double, max: Double, current: Double?) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Today's Range")
+                .font(.caption2.bold())
+                .foregroundStyle(.secondary)
+
+            GeometryReader { geo in
+                let span = max - min
+                let barWidth = geo.size.width
+
+                ZStack(alignment: .leading) {
+                    // Full range bar
+                    Capsule()
+                        .fill(
+                            LinearGradient(
+                                colors: [.red.opacity(0.3), .red.opacity(0.7)],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .frame(height: 8)
+
+                    // Current indicator
+                    if let current, span > 0 {
+                        let offset = barWidth * (current - min) / span
+                        Circle()
+                            .fill(.white)
+                            .frame(width: 10, height: 10)
+                            .shadow(color: .red, radius: 2)
+                            .offset(x: Swift.min(Swift.max(offset - 5, 0), barWidth - 10))
+                    }
+                }
+            }
+            .frame(height: 10)
+
+            HStack {
+                Text("\(Int(min)) BPM")
+                    .font(.system(size: 9))
+                    .foregroundStyle(.tertiary)
+                Spacer()
+                Text("\(Int(max)) BPM")
+                    .font(.system(size: 9))
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .padding(10)
+        .background(Color(.darkGray).opacity(0.3))
+        .cornerRadius(12)
     }
 
     private func statItem(label: String, value: String, color: Color) -> some View {
