@@ -32,6 +32,15 @@ final class WatchAppState: ObservableObject {
 
     func initialize() {
         Task {
+            // Detect fresh install: UserDefaults is cleared on uninstall, Keychain is not
+            if !UserDefaults.standard.bool(forKey: "hasLaunchedBefore") {
+                Logger.provisioning.info("Fresh install detected — clearing stale keychain data")
+                try? keychain.clearAll()
+                UserDefaults.standard.removeObject(forKey: "provisionedIndividualName")
+                UserDefaults.standard.removeObject(forKey: "healthwatch.deviceCode")
+                UserDefaults.standard.set(true, forKey: "hasLaunchedBefore")
+            }
+
             // Check health authorization first
             healthAuthStatus = await HealthKitService.shared.checkAuthorizationStatus()
             healthAuthDone = true

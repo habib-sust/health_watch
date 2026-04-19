@@ -1,4 +1,5 @@
 import SwiftUI
+import WatchKit
 import QRCode
 import os
 
@@ -15,6 +16,7 @@ struct WatchProvisionCodeView: View {
     @State private var pairingComplete = false
     @State private var receivedConfig: DeviceConfigResponse?
     @State private var pollingFailed = false
+    @State private var runtimeSession: WKExtendedRuntimeSession?
 
     private let poller = DeviceConfigPoller()
 
@@ -33,7 +35,11 @@ struct WatchProvisionCodeView: View {
                 qrCodeView
             }
         }
+        .onAppear {
+            startKeepAwakeSession()
+        }
         .onDisappear {
+            stopKeepAwakeSession()
             if !pairingComplete {
                 cancelProvisioning()
             }
@@ -177,6 +183,21 @@ struct WatchProvisionCodeView: View {
                 }
             }
         }
+    }
+
+    // MARK: - Keep Awake Session
+
+    private func startKeepAwakeSession() {
+        let session = WKExtendedRuntimeSession()
+        session.start()
+        runtimeSession = session
+        Logger.provisioning.info("Started extended runtime session to keep screen active during QR display")
+    }
+
+    private func stopKeepAwakeSession() {
+        runtimeSession?.invalidate()
+        runtimeSession = nil
+        Logger.provisioning.info("Stopped extended runtime session")
     }
 
     private func cancelProvisioning() {

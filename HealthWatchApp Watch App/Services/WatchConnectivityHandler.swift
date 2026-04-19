@@ -47,7 +47,21 @@ extension WatchConnectivityHandler: WCSessionDelegate {
         _ session: WCSession,
         activationDidCompleteWith activationState: WCSessionActivationState,
         error: Error?
-    ) {}
+    ) {
+        checkCompanionAppInstalled(session)
+    }
+
+    func sessionReachabilityDidChange(_ session: WCSession) {
+        checkCompanionAppInstalled(session)
+    }
+
+    private func checkCompanionAppInstalled(_ session: WCSession) {
+        if !session.isCompanionAppInstalled {
+            DispatchQueue.main.async {
+                WatchAppState.shared.resetToUnprovisioned(notifyPhone: false)
+            }
+        }
+    }
 
     func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
         guard let data = try? JSONSerialization.data(withJSONObject: message),

@@ -69,6 +69,12 @@ extension WatchConnectivityManager: WCSessionDelegate {
         }
     }
 
+    func sessionWatchStateDidChange(_ session: WCSession) {
+        if !session.isWatchAppInstalled {
+            DispatchQueue.main.async { self.handleDeprovisionFromWatch() }
+        }
+    }
+
     // Required stubs for iOS
     func sessionDidBecomeInactive(_ session: WCSession) {}
     func sessionDidDeactivate(_ session: WCSession) { session.activate() }
