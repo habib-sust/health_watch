@@ -62,8 +62,8 @@ extension WatchConnectivityManager: WCSessionDelegate {
         switch msg.type {
         case .ack:
             DispatchQueue.main.async { self.onAckReceived?() }
-        case .sos:
-            scheduleSOSNotification()
+        case .assistance:
+            scheduleAssistanceNotification()
         case .deprovision:
             DispatchQueue.main.async { self.handleDeprovisionFromWatch() }
         }
@@ -86,15 +86,15 @@ extension WatchConnectivityManager: WCSessionDelegate {
         NotificationCenter.default.post(name: .watchDidDeprovision, object: nil)
     }
 
-    private func scheduleSOSNotification() {
+    private func scheduleAssistanceNotification() {
         let content = UNMutableNotificationContent()
-        content.title = "SOS Alert"
-        content.body = "An individual has triggered an SOS alert from their watch. Immediate attention required."
+        content.title = "Assistance Alert"
+        content.body = "An individual has requested assistance from their watch. Please respond promptly."
         content.sound = .defaultCritical
         content.interruptionLevel = .critical
 
         let request = UNNotificationRequest(
-            identifier: "sos-\(UUID().uuidString)",
+            identifier: "assistance-\(UUID().uuidString)",
             content: content,
             trigger: nil // deliver immediately
         )

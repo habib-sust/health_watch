@@ -6,7 +6,7 @@ struct WatchProvisionedTabView: View {
     var body: some View {
         TabView {
             DailyActivityView()
-            WatchSOSView()
+            WatchAssistanceView()
             WatchStatusView()
         }
         .tabViewStyle(.verticalPage)

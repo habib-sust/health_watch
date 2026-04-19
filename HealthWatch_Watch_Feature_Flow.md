@@ -2,7 +2,7 @@
 
 ## Overview
 
-The HealthWatch watchOS app serves as a health monitoring companion for individuals under care. It provides three core features: **Daily Activity tracking**, **SOS alerts**, and **Device Provisioning**. After the watch is provisioned (linked to an individual), the wearer can view their health data at a glance and send emergency alerts to staff.
+The HealthWatch watchOS app serves as a health monitoring companion for individuals under care. It provides three core features: **Daily Activity tracking**, **Assistance alerts**, and **Device Provisioning**. After the watch is provisioned (linked to an individual), the wearer can view their health data at a glance and send emergency alerts to staff.
 
 ---
 
@@ -11,7 +11,7 @@ The HealthWatch watchOS app serves as a health monitoring companion for individu
 | Feature | Purpose | Tab |
 |---------|---------|-----|
 | **Daily Activity** | View steps, heart rate, and sleep data | First tab |
-| **SOS Alert** | Send an emergency alert to staff | Second tab |
+| **Assistance Alert** | Request assistance from staff | Second tab |
 | **Device Status** | View connection and sync status | Third tab |
 | **Provisioning** | Link the watch to an individual's record | Shown before provisioning |
 
@@ -97,25 +97,25 @@ On first use after provisioning, the watch asks for permission to read health da
 
 ---
 
-## 4. SOS Alert
+## 4. Assistance Alert
 
-The SOS feature allows the wearer to quickly alert staff in an emergency.
+The Assistance feature allows the wearer to quickly request help from staff.
 
 **What the wearer sees:**
 
-1. Swipe to the SOS tab (second page)
-2. A large red "Send SOS" button fills the screen
+1. Swipe to the Assistance tab (second page)
+2. A large orange "Request Assistance" button fills the screen
 3. Tapping it:
    - The watch vibrates to confirm
-   - The button changes to a green checkmark with "SOS Sent"
+   - The button changes to a green checkmark with "Alert Sent"
    - A message reads "Staff has been notified"
 4. After 5 seconds, the button resets so it can be used again
 
 **What happens behind the scenes:**
 - The watch sends the alert to the paired iPhone
 - The iPhone displays a notification (even if the app is in the foreground):
-  - Title: "SOS Alert"
-  - Message: alert from the watch with a timestamp
+  - Title: "Assistance Alert"
+  - Message: an individual has requested assistance
 - In production, this would notify staff via the server
 
 ---
@@ -149,7 +149,7 @@ Provisioned? ──No──> Provisioning Screen
 │    ├── Heart Rate Card ──> Detail│
 │    └── Sleep Card ──> Detail    │
 │                                 │
-│  Tab 2: SOS Alert               │
+│  Tab 2: Assistance Alert               │
 │                                 │
 │  Tab 3: Device Status           │
 └─────────────────────────────────┘
