@@ -28,8 +28,8 @@ struct IndividualDetailView: View {
                     // Summary row
                     summarySection
 
-                    // Vitals section
-                    sectionHeader("Vitals")
+                    // Heart Rate
+                    sectionHeader("Heart Rate")
                     HealthMetricChartView(
                         title: "Heart Rate",
                         samples: viewModel.heartRateSamples,
@@ -39,32 +39,28 @@ struct IndividualDetailView: View {
                     )
                     .padding(.horizontal)
 
-                    HealthMetricChartView(
-                        title: "Blood Oxygen",
-                        samples: viewModel.oxygenSamples,
-                        unit: "%",
-                        color: .blue,
-                        chartStyle: .line
-                    )
-                    .padding(.horizontal)
-
-                    HealthMetricChartView(
-                        title: "Respiratory Rate",
-                        samples: viewModel.respiratoryRateSamples,
-                        unit: "breaths/min",
-                        color: .teal,
-                        chartStyle: .line
-                    )
-                    .padding(.horizontal)
-
-                    // Activity section
+                    // Steps
                     sectionHeader("Activity")
                     HealthMetricChartView(
                         title: "Steps",
                         samples: viewModel.stepSamples,
                         unit: "steps",
-                        color: .orange,
+                        color: .green,
                         chartStyle: .bar
+                    )
+                    .padding(.horizontal)
+
+                    // Sleep
+                    sectionHeader("Sleep")
+                    SleepStageChartView(
+                        samples: viewModel.sleepSamples,
+                        totalSleep: viewModel.formattedTotalSleep,
+                        bedtime: viewModel.sleepBedtime,
+                        wakeTime: viewModel.sleepWakeTime,
+                        deepMinutes: viewModel.sleepStageMinutes(for: .asleepDeep),
+                        coreMinutes: viewModel.sleepStageMinutes(for: .asleepCore),
+                        remMinutes: viewModel.sleepStageMinutes(for: .asleepREM),
+                        awakeMinutes: viewModel.sleepStageMinutes(for: .awake)
                     )
                     .padding(.horizontal)
                 }
@@ -94,15 +90,13 @@ struct IndividualDetailView: View {
                     color: .red
                 )
             }
-            if let spo2 = viewModel.oxygenSamples.last?.value {
-                MetricRowView(
-                    icon: "lungs.fill",
-                    title: "SpO2",
-                    value: String(format: "%.1f", spo2),
-                    unit: "%",
-                    color: .blue
-                )
-            }
+            MetricRowView(
+                icon: "figure.walk",
+                title: "Steps",
+                value: "\(viewModel.totalSteps)",
+                unit: "steps",
+                color: .green
+            )
         }
         .padding(.horizontal)
     }

@@ -27,9 +27,8 @@ enum TimeRange: String, CaseIterable, Identifiable {
 final class IndividualDetailViewModel: ObservableObject {
     @Published var selectedTimeRange: TimeRange = .last24Hours
     @Published var heartRateSamples: [HealthSample] = []
-    @Published var oxygenSamples: [HealthSample] = []
     @Published var stepSamples: [HealthSample] = []
-    @Published var respiratoryRateSamples: [HealthSample] = []
+    @Published var sleepSamples: [HealthSample] = []
     @Published var isLoading = false
 
     let individual: IndividualSummary
@@ -54,7 +53,6 @@ final class IndividualDetailViewModel: ObservableObject {
             )
             categorizeSamples(samples)
         } catch {
-            // Fall back to mock data
             loadMockData(hours: hours)
         }
 
@@ -63,15 +61,46 @@ final class IndividualDetailViewModel: ObservableObject {
 
     private func categorizeSamples(_ samples: [HealthSample]) {
         heartRateSamples = samples.filter { $0.typeIdentifier == HealthKitTypes.heartRate }
-        oxygenSamples = samples.filter { $0.typeIdentifier == HealthKitTypes.oxygenSaturation }
         stepSamples = samples.filter { $0.typeIdentifier == HealthKitTypes.stepCount }
-        respiratoryRateSamples = samples.filter { $0.typeIdentifier == HealthKitTypes.respiratoryRate }
+        sleepSamples = samples.filter { $0.typeIdentifier == HealthKitTypes.sleepAnalysis }
     }
 
     private func loadMockData(hours: Int) {
         heartRateSamples = MockHealthData.heartRateSamples(for: individual.id, hours: hours)
-        oxygenSamples = MockHealthData.oxygenSaturationSamples(for: individual.id, hours: hours)
         stepSamples = MockHealthData.stepCountSamples(for: individual.id, hours: hours)
-        respiratoryRateSamples = MockHealthData.respiratoryRateSamples(for: individual.id, hours: hours)
+        sleepSamples = MockHealthData.sleepSamples(for: individual.id, hours: hours)
+    }
+
+    // MARK: - Computed Sleep Stats
+
+    var totalSleepMinutes: Double {
+        sleepSamples
+            .filter { HealthKitTypes.SleepStage(rawValue: Int($0.value))?.isAsleep == true }
+            .reduce(0) { $0 + $1.endDate.timeIntervalSince($1.startDate) / 60 }
+    }
+
+    var formattedTotalSleep: String {
+        let total = totalSleepMinutes
+        let hours = Int(total) / 60
+        let minutes = Int(total) % 60
+        return "\(hours)h \(minutes)m"
+    }
+
+    func sleepStageMinutes(for stage: HealthKitTypes.SleepStage) -> Double {
+        sleepSamples
+            .filter { Int($0.value) == stage.rawValue }
+            .reduce(0) { $0 + $1.endDate.timeIntervalSince($1.startDate) / 60 }
+    }
+
+    var sleepBedtime: Date? {
+        sleepSamples.min(by: { $0.startDate < $1.startDate })?.startDate
+    }
+
+    var sleepWakeTime: Date? {
+        sleepSamples.max(by: { $0.endDate < $1.endDate })?.endDate
+    }
+
+    var totalSteps: Int {
+        Int(stepSamples.reduce(0) { $0 + $1.value })
     }
 }

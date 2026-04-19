@@ -2,7 +2,6 @@ import SwiftUI
 
 struct IndividualCardView: View {
     let individual: IndividualSummary
-    var isProvisioned: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -10,11 +9,9 @@ struct IndividualCardView: View {
                 Text(individual.name)
                     .font(.headline)
                     .lineLimit(1)
-                if isProvisioned {
-                    Image(systemName: "applewatch")
-                        .font(.caption)
-                        .foregroundStyle(.blue)
-                }
+                Image(systemName: "applewatch")
+                    .font(.caption)
+                    .foregroundStyle(.blue)
                 Spacer()
                 StatusIndicator(status: individual.status)
             }
@@ -32,10 +29,6 @@ struct IndividualCardView: View {
 
             if let lastSync = individual.lastSyncDate {
                 Text("Synced \(lastSync, style: .relative) ago")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else {
-                Text("No data yet")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

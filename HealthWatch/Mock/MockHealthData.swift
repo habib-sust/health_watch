@@ -2,7 +2,7 @@ import Foundation
 
 /// Sample health data for populating charts in the demo build.
 struct MockHealthData {
-    /// Generate mock heart rate samples over the last 24 hours
+    /// Generate mock heart rate samples over the given hours
     static func heartRateSamples(for individualId: String, hours: Int = 24) -> [HealthSample] {
         let now = Date()
         return (0..<hours * 4).map { index in
@@ -15,25 +15,6 @@ struct MockHealthData {
                 typeIdentifier: HealthKitTypes.heartRate,
                 value: baseRate + variation,
                 unit: "count/min",
-                startDate: date,
-                endDate: date,
-                sourceBundleId: "com.apple.health"
-            )
-        }.reversed()
-    }
-
-    /// Generate mock SpO2 samples
-    static func oxygenSaturationSamples(for individualId: String, hours: Int = 24) -> [HealthSample] {
-        let now = Date()
-        return (0..<hours).map { index in
-            let hoursAgo = Double(index)
-            let date = now.addingTimeInterval(-hoursAgo * 3600)
-            let value = Double.random(in: 95...100)
-            return HealthSample(
-                id: UUID(),
-                typeIdentifier: HealthKitTypes.oxygenSaturation,
-                value: value,
-                unit: "%",
                 startDate: date,
                 endDate: date,
                 sourceBundleId: "com.apple.health"
@@ -61,30 +42,60 @@ struct MockHealthData {
         }.reversed()
     }
 
-    /// Generate mock respiratory rate samples
-    static func respiratoryRateSamples(for individualId: String, hours: Int = 24) -> [HealthSample] {
+    /// Generate mock sleep samples for the last night
+    static func sleepSamples(for individualId: String, hours: Int = 24) -> [HealthSample] {
+        // Generate a single night's sleep session (roughly 7-8 hours)
+        let calendar = Calendar.current
         let now = Date()
-        return (0..<hours * 2).map { index in
-            let minutesAgo = Double(index) * 30
-            let date = now.addingTimeInterval(-minutesAgo * 60)
-            let value = Double.random(in: 12...20)
-            return HealthSample(
+
+        // Bedtime: last night around 11 PM
+        var bedtimeComponents = calendar.dateComponents([.year, .month, .day], from: now.addingTimeInterval(-24 * 3600))
+        bedtimeComponents.hour = 23
+        bedtimeComponents.minute = Int.random(in: 0...30)
+        let bedtime = calendar.date(from: bedtimeComponents) ?? now.addingTimeInterval(-8 * 3600)
+
+        var samples: [HealthSample] = []
+        var current = bedtime
+
+        // Sleep stages cycle: Core → Deep → Core → REM → repeat, with occasional awake
+        let stages: [(HealthKitTypes.SleepStage, Int)] = [
+            (.asleepCore, 45),
+            (.asleepDeep, 30),
+            (.asleepCore, 40),
+            (.asleepREM, 20),
+            (.awake, 5),
+            (.asleepCore, 50),
+            (.asleepDeep, 25),
+            (.asleepCore, 35),
+            (.asleepREM, 25),
+            (.asleepCore, 40),
+            (.asleepREM, 30),
+            (.awake, 3),
+            (.asleepCore, 30),
+            (.asleepREM, 20),
+        ]
+
+        for (stage, minutes) in stages {
+            let end = current.addingTimeInterval(Double(minutes) * 60)
+            samples.append(HealthSample(
                 id: UUID(),
-                typeIdentifier: HealthKitTypes.respiratoryRate,
-                value: value,
-                unit: "count/min",
-                startDate: date,
-                endDate: date,
+                typeIdentifier: HealthKitTypes.sleepAnalysis,
+                value: Double(stage.rawValue),
+                unit: "category",
+                startDate: current,
+                endDate: end,
                 sourceBundleId: "com.apple.health"
-            )
-        }.reversed()
+            ))
+            current = end
+        }
+
+        return samples
     }
 
     /// Get all mock samples for a given individual
     static func allSamples(for individualId: String) -> [HealthSample] {
         heartRateSamples(for: individualId)
-        + oxygenSaturationSamples(for: individualId)
         + stepCountSamples(for: individualId)
-        + respiratoryRateSamples(for: individualId)
+        + sleepSamples(for: individualId)
     }
 }

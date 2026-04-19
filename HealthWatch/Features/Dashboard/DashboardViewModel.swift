@@ -15,12 +15,23 @@ final class DashboardViewModel: ObservableObject {
         let tokenStore = StaticTokenStore(token: DemoConfiguration.apiToken)
         self.apiClient = APIClient(baseURL: url, tokenStore: tokenStore)
 
-        // Pre-populate with mock data so dashboard is never empty
-        self.individuals = MockIndividuals.all.map { individual in
-            individual.toSummary(
-                lastSyncDate: Date().addingTimeInterval(-Double.random(in: 60...3600)),
-                latestHeartRate: Double.random(in: 62...88)
-            )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleProvisioningChange),
+            name: .watchDidDeprovision,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleProvisioningChange),
+            name: .provisioningDidChange,
+            object: nil
+        )
+    }
+
+    @objc private func handleProvisioningChange() {
+        Task { @MainActor in
+            await refresh()
         }
     }
 
@@ -34,17 +45,56 @@ final class DashboardViewModel: ObservableObject {
     }
 
     func refresh() async {
+        let provisionedId = UserDefaults.standard.string(forKey: "provisionedIndividualId")
+        let provisionedName = UserDefaults.standard.string(forKey: "provisionedIndividualName")
+
+        guard let individualId = provisionedId, let name = provisionedName else {
+            individuals = []
+            isLoading = false
+            return
+        }
+
         isLoading = individuals.isEmpty
+
+        // Fetch latest health samples for the provisioned individual
+        let now = Date()
+        let oneDayAgo = now.addingTimeInterval(-24 * 3600)
+
+        var lastSync: Date?
+        var latestHR: Double?
+
         do {
-            let fetched: [IndividualSummary] = try await apiClient.send(.getIndividuals())
-            individuals = fetched
+            let samples: [HealthSample] = try await apiClient.send(
+                .getHealth(individualId: individualId, from: oneDayAgo, to: now)
+            )
+
+            // Latest sample date = last sync
+            lastSync = samples.map(\.endDate).max()
+
+            // Latest heart rate
+            latestHR = samples
+                .filter { $0.typeIdentifier == HealthKitTypes.heartRate }
+                .max(by: { $0.startDate < $1.startDate })?
+                .value
+
             error = nil
         } catch let err as APIError {
-            // On failure, keep showing current data — don't blank the dashboard
             error = err
         } catch {
-            // Network or other error — keep current data
+            // Network error — keep current data if we have it
+            if !individuals.isEmpty { return }
         }
+
+        individuals = [
+            IndividualSummary(
+                id: individualId,
+                name: name,
+                status: lastSync != nil ? .normal : .offline,
+                lastSyncDate: lastSync,
+                latestHeartRate: latestHR
+            )
+        ]
+
         isLoading = false
     }
 

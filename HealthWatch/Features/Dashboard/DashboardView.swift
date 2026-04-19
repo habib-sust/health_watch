@@ -2,12 +2,6 @@ import SwiftUI
 
 struct DashboardView: View {
     @StateObject private var viewModel = DashboardViewModel()
-    @AppStorage("provisionedIndividualId") private var provisionedIndividualId: String?
-
-    private let columns = [
-        GridItem(.flexible()),
-        GridItem(.flexible())
-    ]
 
     var body: some View {
         NavigationStack {
@@ -15,14 +9,18 @@ struct DashboardView: View {
                 if viewModel.isLoading {
                     ProgressView("Loading...")
                         .padding(.top, 40)
+                } else if viewModel.individuals.isEmpty {
+                    ContentUnavailableView(
+                        "No Individuals",
+                        systemImage: "person.crop.circle.badge.questionmark",
+                        description: Text("Provision a watch to start monitoring an individual.")
+                    )
+                    .padding(.top, 40)
                 } else {
-                    LazyVGrid(columns: columns, spacing: 12) {
+                    LazyVStack(spacing: 12) {
                         ForEach(viewModel.individuals) { individual in
                             NavigationLink(value: individual) {
-                                IndividualCardView(
-                                    individual: individual,
-                                    isProvisioned: individual.id == provisionedIndividualId
-                                )
+                                IndividualCardView(individual: individual)
                             }
                             .buttonStyle(.plain)
                         }

@@ -154,9 +154,11 @@ final class WatchAppState: ObservableObject {
 
     // MARK: - Recovery
 
-    /// Re-provisioning: clear all data and return to unprovisioned state
-    func resetToUnprovisioned() {
-        Logger.provisioning.info("Resetting to unprovisioned state — clearing all data")
+    /// Re-provisioning: clear all data and return to unprovisioned state.
+    /// Set `notifyPhone` to true when the user initiates from the watch,
+    /// false when the reset is triggered by an incoming deprovision message from the phone.
+    func resetToUnprovisioned(notifyPhone: Bool = true) {
+        Logger.provisioning.info("Resetting to unprovisioned state — clearing all data (notifyPhone: \(notifyPhone))")
         HealthKitCollector.shared.stopObserverQueries()
         HealthKitCollector.shared.clearDeduplicationCache()
         LocalBufferManager.shared.clearAllBufferedData()
@@ -166,6 +168,12 @@ final class WatchAppState: ObservableObject {
         lastSyncDate = nil
         syncStatus = .idle
         mode = .unprovisioned
+
+        if notifyPhone {
+            WatchConnectivityHandler.shared.sendDeprovision()
+            Logger.provisioning.info("Deprovision message sent to phone")
+        }
+
         Logger.provisioning.info("Reset complete — watch is unprovisioned")
     }
 

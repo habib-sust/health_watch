@@ -31,6 +31,15 @@ final class WatchConnectivityHandler: NSObject {
 
         session?.sendMessage(dict, replyHandler: nil, errorHandler: nil)
     }
+
+    func sendDeprovision() {
+        let message = ProvisioningMessage(type: .deprovision)
+        guard let data = try? JSONEncoder().encode(message),
+              let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return }
+
+        session?.sendMessage(dict, replyHandler: nil, errorHandler: nil)
+    }
 }
 
 extension WatchConnectivityHandler: WCSessionDelegate {
@@ -48,7 +57,7 @@ extension WatchConnectivityHandler: WCSessionDelegate {
         switch msg.type {
         case .deprovision:
             DispatchQueue.main.async {
-                WatchAppState.shared.resetToUnprovisioned()
+                WatchAppState.shared.resetToUnprovisioned(notifyPhone: false)
             }
             sendAck()
 

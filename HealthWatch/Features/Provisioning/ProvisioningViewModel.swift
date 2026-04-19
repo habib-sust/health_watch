@@ -38,6 +38,21 @@ final class ProvisioningViewModel: ObservableObject {
 
         self.provisionedIndividualId = UserDefaults.standard.string(forKey: Self.provisionedIdKey)
         Logger.provisioning.info("ProvisioningViewModel initialized, existing provisioned ID: \(self.provisionedIndividualId ?? "none")")
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleWatchDeprovision),
+            name: .watchDidDeprovision,
+            object: nil
+        )
+    }
+
+    @objc private func handleWatchDeprovision() {
+        Task { @MainActor in
+            provisionedIndividualId = nil
+            state = .selectIndividual
+            Logger.provisioning.info("Watch initiated deprovision — cleared iOS provisioning state")
+        }
     }
 
     // MARK: - QR Scanning Flow
@@ -131,6 +146,7 @@ final class ProvisioningViewModel: ObservableObject {
         UserDefaults.standard.set(individualName, forKey: Self.provisionedNameKey)
         UserDefaults.standard.set(deviceCode, forKey: Self.provisionedDeviceCodeKey)
         provisionedIndividualId = individualId
+        NotificationCenter.default.post(name: .provisioningDidChange, object: nil)
         Logger.provisioning.info("Provisioning saved — individualId: \(individualId), name: \(individualName), deviceCode: \(deviceCode)")
     }
 
@@ -158,6 +174,7 @@ final class ProvisioningViewModel: ObservableObject {
         UserDefaults.standard.removeObject(forKey: Self.provisionedDeviceCodeKey)
         provisionedIndividualId = nil
         state = .selectIndividual
+        NotificationCenter.default.post(name: .provisioningDidChange, object: nil)
         Logger.provisioning.info("Provisioning data cleared, returned to selectIndividual state")
     }
 

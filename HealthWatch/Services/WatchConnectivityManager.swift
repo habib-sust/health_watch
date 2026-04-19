@@ -3,6 +3,11 @@ import Combine
 import WatchConnectivity
 import UserNotifications
 
+extension Notification.Name {
+    static let watchDidDeprovision = Notification.Name("watchDidDeprovision")
+    static let provisioningDidChange = Notification.Name("provisioningDidChange")
+}
+
 final class WatchConnectivityManager: NSObject, ObservableObject {
     @Published var isReachable = false
     private var session: WCSession?
@@ -59,14 +64,21 @@ extension WatchConnectivityManager: WCSessionDelegate {
             DispatchQueue.main.async { self.onAckReceived?() }
         case .sos:
             scheduleSOSNotification()
-        default:
-            break
+        case .deprovision:
+            DispatchQueue.main.async { self.handleDeprovisionFromWatch() }
         }
     }
 
     // Required stubs for iOS
     func sessionDidBecomeInactive(_ session: WCSession) {}
     func sessionDidDeactivate(_ session: WCSession) { session.activate() }
+
+    private func handleDeprovisionFromWatch() {
+        UserDefaults.standard.removeObject(forKey: "provisionedIndividualId")
+        UserDefaults.standard.removeObject(forKey: "provisionedIndividualName")
+        UserDefaults.standard.removeObject(forKey: "provisionedDeviceCode")
+        NotificationCenter.default.post(name: .watchDidDeprovision, object: nil)
+    }
 
     private func scheduleSOSNotification() {
         let content = UNMutableNotificationContent()
