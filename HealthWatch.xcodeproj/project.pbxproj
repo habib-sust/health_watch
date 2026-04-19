@@ -423,6 +423,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = HealthWatch/Info.plist;
+				INFOPLIST_KEY_NSCameraUsageDescription = "HealthWatch needs camera access to scan the provisioning QR code on the Apple Watch.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -434,7 +435,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.habib.HealthWatch;
+				PRODUCT_BUNDLE_IDENTIFIER = net.theraptechne.techne;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -457,6 +458,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = HealthWatch/Info.plist;
+				INFOPLIST_KEY_NSCameraUsageDescription = "HealthWatch needs camera access to scan the provisioning QR code on the Apple Watch.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -468,7 +470,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.habib.HealthWatch;
+				PRODUCT_BUNDLE_IDENTIFIER = net.theraptechne.techne;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -497,13 +499,13 @@
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "HealthWatch needs access to your health data to monitor vitals and sync them with your care team.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "This app does not write health data. This permission is reserved for future use.";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
-				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.habib.HealthWatch;
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = net.theraptechne.techne;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.habib.HealthWatch.watchkitapp;
+				PRODUCT_BUNDLE_IDENTIFIER = net.theraptechne.techne.watchkitapp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
@@ -535,13 +537,13 @@
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "HealthWatch needs access to your health data to monitor vitals and sync them with your care team.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "This app does not write health data. This permission is reserved for future use.";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
-				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.habib.HealthWatch;
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = net.theraptechne.techne;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.habib.HealthWatch.watchkitapp;
+				PRODUCT_BUNDLE_IDENTIFIER = net.theraptechne.techne.watchkitapp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
