@@ -7,6 +7,7 @@ actor HealthKitService {
     static let shared = HealthKitService()
 
     private let store = HKHealthStore()
+    private let iso = ISO8601DateFormatter()
 
     private let readTypes: Set<HKObjectType> = {
         var types = Set<HKObjectType>()
@@ -27,13 +28,13 @@ actor HealthKitService {
         do {
             let status = try await store.statusForAuthorizationRequest(toShare: [], read: readTypes)
             switch status {
-            case .unnecessary:
-                // Already prompted — treat as authorized (data will be empty if user denied)
-                return .authorized
-            case .shouldRequest:
-                return .notDetermined
-            @unknown default:
-                return .notDetermined
+                case .unnecessary:
+                    // Already prompted — treat as authorized (data will be empty if user denied)
+                    return .authorized
+                case .shouldRequest:
+                    return .notDetermined
+                @unknown default:
+                    return .notDetermined
             }
         } catch {
             Logger.healthKit.error("[HealthKitService] Auth status check failed: \(error.localizedDescription)")
@@ -77,12 +78,13 @@ actor HealthKitService {
     // MARK: - Heart Rate
 
     private func fetchHeartRateData() async -> HeartRateData {
-        guard let hrType = HKQuantityType.quantityType(forIdentifier: .heartRate) else { return HeartRateData() }
+        guard let hrType = HKQuantityType.quantityType(forIdentifier: .heartRate)
+        else { return await HeartRateData() }
         let bpmUnit = HKUnit.count().unitDivided(by: .minute())
         let startOfDay = Calendar.current.startOfDay(for: Date())
         let predicate = HKQuery.predicateForSamples(withStart: startOfDay, end: Date(), options: .strictStartDate)
 
-        var data = HeartRateData()
+        var data = await HeartRateData()
 
         // Today's stats
         let stats = await fetchStatistics(for: hrType, predicate: predicate, options: [.discreteMin, .discreteMax, .discreteAverage])
@@ -103,6 +105,21 @@ actor HealthKitService {
             }
         }
 
+        let hrJSON: [String: Any] = [
+            "method": "fetchHeartRateData",
+            "queryRange": ["start": iso.string(from: startOfDay), "end": iso.string(from: Date())],
+            "current": data.current as Any,
+            "min": data.min as Any,
+            "max": data.max as Any,
+            "avg": data.avg as Any,
+            "resting": data.resting as Any,
+            "lastReadingDate": data.lastReadingDate.map { iso.string(from: $0) } as Any
+        ]
+        if let jsonData = try? JSONSerialization.data(withJSONObject: hrJSON, options: .prettyPrinted),
+           let jsonStr = String(data: jsonData, encoding: .utf8) {
+            Logger.healthKit.debug("[HealthKitService] HeartRateData JSON:\n\(jsonStr)")
+        }
+
         return data
     }
 
@@ -112,23 +129,56 @@ actor HealthKitService {
         let threeHoursAgo = Date().addingTimeInterval(-3 * 3600)
         let predicate = HKQuery.predicateForSamples(withStart: threeHoursAgo, end: Date(), options: .strictStartDate)
 
-        let samples = await fetchQuantitySamples(for: hrType, predicate: predicate, limit: 100)
-        return samples.map { ActivityDataPoint(date: $0.startDate, value: $0.quantity.doubleValue(for: bpmUnit)) }
+        let samples = await fetchQuantitySamples(for: hrType, predicate: predicate, limit: 10)
+        let points = samples.map { ActivityDataPoint(date: $0.startDate, value: $0.quantity.doubleValue(for: bpmUnit)) }
+
+        let historyJSON: [String: Any] = [
+            "method": "fetchHeartRateHistory",
+            "queryRange": ["start": iso.string(from: threeHoursAgo), "end": iso.string(from: Date())],
+            "sampleCount": samples.count,
+            "samples": samples.map { s -> [String: Any] in
+                [
+                    "startDate": iso.string(from: s.startDate),
+                    "endDate": iso.string(from: s.endDate),
+                    "bpm": s.quantity.doubleValue(for: bpmUnit),
+                    "deviceName": s.sourceRevision.source.name,
+                    "deviceType": s.device?.name ?? "unknown"
+                ]
+            }
+        ]
+        if let jsonData = try? JSONSerialization.data(withJSONObject: historyJSON, options: .prettyPrinted),
+           let jsonStr = String(data: jsonData, encoding: .utf8) {
+            Logger.healthKit.debug("[HealthKitService] HeartRateHistory JSON:\n\(jsonStr)")
+        }
+
+        return points
     }
 
     // MARK: - Steps
 
     private func fetchStepsData() async -> StepsData {
-        guard let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount) else { return StepsData() }
+        guard let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount) else { return await StepsData() }
         let startOfDay = Calendar.current.startOfDay(for: Date())
         let predicate = HKQuery.predicateForSamples(withStart: startOfDay, end: Date(), options: .strictStartDate)
 
-        var data = StepsData()
+        var data = await StepsData()
         let stats = await fetchStatistics(for: stepType, predicate: predicate, options: .cumulativeSum)
         if let sum = stats?.sumQuantity()?.doubleValue(for: .count()) {
             data.totalToday = sum
             data.lastUpdated = Date()
         }
+
+        let stepsJSON: [String: Any] = [
+            "method": "fetchStepsData",
+            "queryRange": ["start": iso.string(from: startOfDay), "end": iso.string(from: Date())],
+            "totalToday": data.totalToday,
+            "lastUpdated": data.lastUpdated.map { iso.string(from: $0) } as Any
+        ]
+        if let jsonData = try? JSONSerialization.data(withJSONObject: stepsJSON, options: .prettyPrinted),
+           let jsonStr = String(data: jsonData, encoding: .utf8) {
+            Logger.healthKit.debug("[HealthKitService] StepsData JSON:\n\(jsonStr)")
+        }
+
         return data
     }
 
@@ -143,7 +193,7 @@ actor HealthKitService {
             let query = HKStatisticsCollectionQuery(
                 quantityType: stepType,
                 quantitySamplePredicate: predicate,
-                options: .cumulativeSum,
+                options: [.cumulativeSum, .separateBySource],
                 anchorDate: startOfDay,
                 intervalComponents: DateComponents(hour: 1)
             )
@@ -155,12 +205,40 @@ actor HealthKitService {
                     return
                 }
 
+                let iso = ISO8601DateFormatter()
                 var buckets: [HourlyStepBucket] = []
                 collection.enumerateStatistics(from: startOfDay, to: now) { stats, _ in
                     let hour = calendar.component(.hour, from: stats.startDate)
                     let steps = stats.sumQuantity()?.doubleValue(for: .count()) ?? 0
-                    buckets.append(HourlyStepBucket(hour: hour, date: stats.startDate, steps: steps))
+                    buckets.append(HourlyStepBucket(
+                        hour: hour,
+                        date: stats.startDate,
+                        steps: steps,
+                        source: stats.sources?.first?.name ?? "unknown",
+                        souceBundle: stats.sources?.first?.bundleIdentifier ?? "unknown"
+                    )
+                    )
                 }
+
+                let hourlyJSON: [String: Any] = [
+                    "method": "fetchHourlySteps",
+                    "queryRange": ["start": iso.string(from: startOfDay), "end": iso.string(from: now)],
+                    "bucketCount": buckets.count,
+                    "buckets": buckets.map { b -> [String: Any] in
+                        [
+                            "hour": b.hour,
+                            "date": iso.string(from: b.date),
+                            "steps": b.steps,
+                            "deviceName": b.source
+
+                        ]
+                    }
+                ]
+                if let jsonData = try? JSONSerialization.data(withJSONObject: hourlyJSON, options: .prettyPrinted),
+                   let jsonStr = String(data: jsonData, encoding: .utf8) {
+                    Logger.healthKit.debug("[HealthKitService] HourlySteps JSON:\n\(jsonStr)")
+                }
+
                 continuation.resume(returning: buckets)
             }
             self.store.execute(query)

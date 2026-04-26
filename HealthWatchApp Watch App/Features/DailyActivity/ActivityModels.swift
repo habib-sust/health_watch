@@ -46,6 +46,8 @@ struct HourlyStepBucket: Identifiable, Sendable {
     let hour: Int
     let date: Date
     let steps: Double
+    let source: String
+    let souceBundle: String
 }
 
 // MARK: - Sleep
